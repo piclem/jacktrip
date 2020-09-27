@@ -58,6 +58,17 @@ using std::cout; using std::endl;
 
 int gVerboseFlag = 0;
 
+enum JTLongOptIDS {
+  OPT_BUFSTRATEGY = 1001,
+  OPT_SIMLOSS,
+  OPT_SIMJITTER,
+  OPT_BROADCAST,
+  OPT_AUTHCERT,
+  OPT_AUTHKEY,
+  OPT_AUTHCREDS,
+  OPT_AUTHUSER,
+  OPT_AUTHPASS
+};
 
 //*******************************************************************************
 Settings::Settings() :
@@ -70,6 +81,7 @@ Settings::Settings() :
     mServerUdpPortNum(0),
     mUnderrunMode(JackTrip::WAVETABLE),
     mStopOnTimeout(false),
+    mBufferStrategy(1),
     mLoopBack(false),
     #ifdef WAIR // WAIR
     mNumNetRevChans(0),
@@ -86,7 +98,12 @@ Settings::Settings() :
     mChanfeDefaultBS(false),
     mHubConnectionMode(JackTrip::SERVERTOCLIENT),
     mConnectDefaultAudioPorts(true),
-    mIOStatTimeout(0)
+    mIOStatTimeout(0),
+    mSimulatedLossRate(0.0),
+    mSimulatedJitterRate(0.0),
+    mSimulatedDelayRel(0.0),
+    mBroadcastQueue(0),
+    mAuth(false)
 {}
 
 //*******************************************************************************
@@ -95,6 +112,8 @@ Settings::~Settings() = default;
 //*******************************************************************************
 void Settings::parseInput(int argc, char** argv)
 {
+    // Always use decimal point for floating point numbers
+    setlocale( LC_NUMERIC, "C" );
     // If no command arguments are given, print instructions
     if(argc == 1) {
         printUsage();
@@ -145,6 +164,16 @@ void Settings::parseInput(int argc, char** argv)
         { "effects", required_argument, NULL, 'f' }, // Turn on outgoing compressor and incoming reverb, reverbLevel arg
         { "overflowlimiting", required_argument, NULL, 'O' }, // Turn On limiter, cases 'i', 'o', 'io'
         { "assumednumclients", required_argument, NULL, 'a' }, // assumed number of clients (sound sources) (otherwise 2)
+        { "bufstrategy", required_argument, NULL, OPT_BUFSTRATEGY }, // Set bufstrategy
+        { "simloss", required_argument, NULL, OPT_SIMLOSS },
+        { "simjitter", required_argument, NULL, OPT_SIMJITTER },
+        { "broadcast", required_argument, NULL, OPT_BROADCAST },
+        { "auth", no_argument, NULL, 'A' }, // Enable authentication between hub client and hub server
+        { "certfile", required_argument, NULL, OPT_AUTHCERT }, // Certificate for server authentication
+        { "keyfile", required_argument, NULL, OPT_AUTHKEY }, // Private key for server authentication
+        { "credsfile", required_argument, NULL, OPT_AUTHCREDS }, // Username and password store for server authentication
+        { "username", required_argument, NULL, OPT_AUTHUSER }, // Username when using authentication as a hub client
+        { "password", required_argument, NULL, OPT_AUTHPASS }, // Password when using authentication as a hub client
         { "help", no_argument, NULL, 'h' }, // Print Help
         { "examine-audio-delay", required_argument, NULL, 'x' }, // test mode - measure audio round-trip latency statistics
         { NULL, 0, NULL, 0 }
@@ -155,7 +184,7 @@ void Settings::parseInput(int argc, char** argv)
     /// \todo Specify mandatory arguments
     int ch;
     while ((ch = getopt_long(argc, argv,
-                             "n:N:H:sc:SC:o:B:P:U:q:r:b:ztlwjeJ:K:RTd:F:p:DvVhI:G:f:O:a:x:", longopts, NULL)) != -1)
+                             "n:N:H:sc:SC:o:B:P:U:q:r:b:ztlwjeJ:K:RTd:F:p:DvVhI:G:f:O:a:x:A", longopts, NULL)) != -1)
         switch (ch) {
 
         case 'n': // Number of input and output channels
@@ -238,7 +267,13 @@ void Settings::parseInput(int argc, char** argv)
             break;
         case 'q':
             //-------------------------------------------------------
-            if ( atoi(optarg) <= 0 ) {
+            if (0 == strncmp(optarg, "auto", 4)) {
+              mBufferQueueLength = -atoi(optarg+4);
+              if (0 == mBufferQueueLength) {
+                mBufferQueueLength = -500;
+              }
+            }
+            else if ( atoi(optarg) <= 0 ) {
                 std::cerr << "--queue ERROR: The queue has to be equal or greater than 2" << endl;
                 printUsage();
                 std::exit(1); }
@@ -360,6 +395,30 @@ void Settings::parseInput(int argc, char** argv)
                 std::exit(1);
             }
             break;
+        case OPT_BUFSTRATEGY: // Buf strategy
+            mBufferStrategy = atoi(optarg);
+            if (-1 > mBufferStrategy || 2 < mBufferStrategy) {
+                std::cerr << "Unsupported buffer strategy " << optarg << endl;
+                printUsage();
+                std::exit(1);
+            }
+            break;
+        case OPT_SIMLOSS: // Simulate packet loss
+            mSimulatedLossRate = atof(optarg);
+            break;
+        case OPT_SIMJITTER: // Simulate jitter
+            char* endp;
+            mSimulatedJitterRate = strtod(optarg, &endp);
+            if (0 == *endp) {
+                mSimulatedDelayRel = 1.0;
+            }
+            else {
+                mSimulatedDelayRel = atof(endp+1);
+            }
+            break;
+        case OPT_BROADCAST: // Broadcast output
+            mBroadcastQueue = atoi(optarg);
+            break;
         case 'h':
             //-------------------------------------------------------
             printUsage();
@@ -390,6 +449,24 @@ void Settings::parseInput(int argc, char** argv)
             exit(1);
           }
           break; }
+        case 'A': {
+          mAuth = true;
+          break; }
+        case OPT_AUTHCERT:
+          mCertFile = optarg;
+          break;
+        case OPT_AUTHKEY:
+          mKeyFile = optarg;
+          break;
+        case OPT_AUTHCREDS:
+          mCredsFile = optarg;
+          break;
+        case OPT_AUTHUSER:
+          mUsername = optarg;
+          break;
+        case OPT_AUTHPASS:
+          mPassword = optarg;
+          break;
         case 'x': { // examine connection (test mode)
           //-------------------------------------------------------
           mAudioTester.setEnabled(true);
@@ -492,6 +569,8 @@ void Settings::printUsage()
     cout << " -K, --remotename                         Change default remote client name when connecting to a hub server (the default is derived from this computer's external facing IP address)" << endl;
     cout << " -L, --localaddress                       Change default local host IP address (default: 127.0.0.1)" << endl;
     cout << " -D, --nojackportsconnect                 Don't connect default audio ports in jack" << endl;
+    cout << " --bufstrategy     # (0, 1, 2)            Use alternative jitter buffer" << endl;
+    cout << " --broadcast <broadcast_queue>            Turn on broadcast output ports with extra queue (requires new jitter buffer)" << endl;
     cout << endl;
     cout << "OPTIONAL SIGNAL PROCESSING: " << endl;
     cout << " -f, --effects    # (reverbLevel)         Turn on outgoing compressor and incoming mono or stereo reverb, reverbLevel 0 to 1.0 (freeverb) or 1.0+ to 2.0 (zitarev)" << endl;
@@ -499,15 +578,27 @@ void Settings::printUsage()
     cout << " -a, --assumednumclients                  Assumed number of sources mixing at server (otherwise 2 assumed)" << endl;
     cout << endl;
     cout << "ARGUMENTS TO USE JACKTRIP WITHOUT JACK:" << endl;
-    cout << " -R, --rtaudio                                Use system's default sound system instead of Jack" << endl;
-    cout << " -T, --srate         #                      Set the sampling rate, works on --rtaudio mode only (default: 48000)" << endl;
-    cout << " -F, --bufsize       #                      Set the buffer size, works on --rtaudio mode only (default: 128)" << endl;
-    cout << " -d, --deviceid      #                      The rtaudio device id --rtaudio mode only (default: 0)" << endl;
+    cout << " -R, --rtaudio                            Use system's default sound system instead of Jack" << endl;
+    cout << " -T, --srate         #                    Set the sampling rate, works on --rtaudio mode only (default: 48000)" << endl;
+    cout << " -F, --bufsize       #                    Set the buffer size, works on --rtaudio mode only (default: 128)" << endl;
+    cout << " -d, --deviceid      #                    The rtaudio device id --rtaudio mode only (default: 0)" << endl;
     cout << endl;
     cout << "ARGUMENTS TO DISPLAY IO STATISTICS:" << endl;
     cout << " -I, --iostat <time_in_secs>              Turn on IO stat reporting with specified interval (in seconds)" << endl;
     cout << " -G, --iostatlog <log_file>               Save stat log into a file (default: print in stdout)" << endl;
     cout << " -x, --examine-audio-delay #              Print round-trip audio delay statistics every # sec" << endl;
+    cout << endl;
+    cout << "ARGUMENTS TO SIMULATE NETWORK ISSUES:" << endl;
+    cout << " --simloss <rate>                         Simulate packet loss" << endl;
+    cout << " --simjitter <rate>,<d>                   Simulate jitter, d is max delay in packets" << endl;
+    cout << endl;
+    cout << "ARGUMENTS FOR HUB CLIENT/SERVER AUTHENTICATION:" << endl;
+    cout << " -A, --auth                               Use authentication on the client side, or require it on the server side" << endl;
+    cout << " --certfile                               The certificate file to use on the hub server" << endl;
+    cout << " --keyfile                                The private key file to use on the hub server" << endl;
+    cout << " --credsfile                              The file containing the stored usernames and passwords" << endl;
+    cout << " --username                               The username to use when connecting as a hub client" << endl;
+    cout << " --password                               The password to use when connecting as a hub client" << endl;
     cout << endl;
     cout << "HELP ARGUMENTS: " << endl;
     cout << " -v, --version                            Prints Version Number" << endl;
@@ -527,11 +618,8 @@ UdpHubListener *Settings::getConfiguredHubServer()
     udpHub->setWAIR(mWAIR);
 #endif // endwhere
     udpHub->setHubPatch(mHubConnectionMode);
-    if (mHubConnectionMode == JackTrip::NOAUTO) {
-        udpHub->setConnectDefaultAudioPorts(false);
-    } else {
-        udpHub->setConnectDefaultAudioPorts(mConnectDefaultAudioPorts);
-    }
+    // Connect default audio ports must be set after the connection mode.
+    udpHub->setConnectDefaultAudioPorts(mConnectDefaultAudioPorts);
     // Set buffers to zero when underrun
     if ( mUnderrunMode == JackTrip::ZEROS ) {
         cout << "Setting buffers to zero when underrun..." << endl;
@@ -540,9 +628,22 @@ UdpHubListener *Settings::getConfiguredHubServer()
     }
     udpHub->setBufferQueueLength(mBufferQueueLength);
 
+    udpHub->setBufferStrategy(mBufferStrategy);
+    udpHub->setNetIssuesSimulation(mSimulatedLossRate,
+        mSimulatedJitterRate, mSimulatedDelayRel);
+    udpHub->setBroadcast(mBroadcastQueue);
+    
     if (mIOStatTimeout > 0) {
         udpHub->setIOStatTimeout(mIOStatTimeout);
         udpHub->setIOStatStream(mIOStatStream);
+    }
+    
+    if (mAuth) {
+        //(We don't need to check the validity of these files because it's done by the UdpHubListener.)
+        udpHub->setRequireAuth(mAuth);
+        udpHub->setCertFile(mCertFile);
+        udpHub->setKeyFile(mKeyFile);
+        udpHub->setCredsFile(mCredsFile);
     }
     return udpHub;
 }
@@ -636,6 +737,17 @@ JackTrip *Settings::getConfiguredJackTrip()
     // Chanfe default Buffer Size
     if (mChanfeDefaultBS) {
         jackTrip->setAudioBufferSizeInSamples(mAudioBufferSize);
+    }
+    jackTrip->setBufferStrategy(mBufferStrategy);
+    jackTrip->setNetIssuesSimulation(mSimulatedLossRate,
+        mSimulatedJitterRate, mSimulatedDelayRel);
+    jackTrip->setBroadcast(mBroadcastQueue);
+    
+    // Set auth details if we're in hub client mode
+    if (mAuth && mJackTripMode == JackTrip::CLIENTTOPINGSERVER) {
+        jackTrip->setUseAuth(true);
+        jackTrip->setUsername(mUsername);
+        jackTrip->setPassword(mPassword);
     }
 
     // Add Plugins

@@ -46,27 +46,30 @@
 #include <QThreadPool>
 #include <QUdpSocket>
 #include <QHostAddress>
-#include <QTcpSocket>
-#include <QTcpServer>
+#include "SslServer.h"
 #include <QMutex>
 
 #include "JackTrip.h"
 #include "jacktrip_types.h"
 #include "jacktrip_globals.h"
+#include "Patcher.h"
+#include "Auth.h"
+
 class JackTripWorker; // forward declaration
 class Settings;
 
 typedef struct {
     QString address;
     int16_t port;
-} addressPortPair;
+    QString clientName;
+} addressPortNameTriple;
 
 /** \brief Hub UDP listener on the Server.
  *
  * This creates a server that will listen on the well know port (the server port) and will
  * spawn JackTrip threads into the Thread pool. Clients request a connection.
  */
-class UdpHubListener : public QThread
+class UdpHubListener : public QObject
 {
     Q_OBJECT;
 
@@ -74,16 +77,22 @@ public:
     UdpHubListener(int server_port = gServerUdpPort, int server_udp_port = 0);
     virtual ~UdpHubListener();
 
-    /// \brief Implements the Thread Loop. To start the thread, call start()
-    /// ( DO NOT CALL run() )
-    void run();
+    /// \brief Starts the TCP server
+    void start();
 
     /// \brief Stops the execution of the Thread
     void stop() { mStopped = true; }
 
     int releaseThread(int id);
 
-    void setConnectDefaultAudioPorts(bool connectDefaultAudioPorts) { m_connectDefaultAudioPorts = connectDefaultAudioPorts; }
+    void setConnectDefaultAudioPorts(bool connectDefaultAudioPorts)
+    {
+        //Only allow us to override this in the default patching mode. (Or TUB mode.)
+        //(Allows -D to continue to function as a synonym for -p5.)
+        if (mHubPatch == JackTrip::SERVERTOCLIENT || mHubPatch == JackTrip::RESERVEDMATRIX) {
+            m_connectDefaultAudioPorts = connectDefaultAudioPorts;
+        }
+    }
     
     static void sigIntHandler(__attribute__((unused)) int unused)
     { std::cout << std::endl << "Shutting Down..." << std::endl; sSigInt = true; }
@@ -91,6 +100,9 @@ public:
 private slots:
     void testReceive()
     { std::cout << "========= TEST RECEIVE SLOT ===========" << std::endl; }
+    void receivedNewConnection();
+    void receivedClientInfo();
+    void stopCheck();
 
 signals:
     void Listening();
@@ -106,8 +118,9 @@ private:
    */
     static void bindUdpSocket(QUdpSocket& udpsocket, int port);
 
-    int readClientUdpPort(QTcpSocket* clientConnection, QString &clientName);
-    int sendUdpPort(QTcpSocket* clientConnection, int udp_port);
+    int readClientUdpPort(QSslSocket* clientConnection, QString &clientName);
+    int checkAuthAndReadPort(QSslSocket* clientConnection, QString &clientName);
+    int sendUdpPort(QSslSocket* clientConnection, qint32 udp_port);
 
 
     /** \brief Send the JackTripWorker to the thread pool. This will run
@@ -136,15 +149,23 @@ private:
     QVector<JackTripWorker*>* mJTWorkers; ///< Vector of JackTripWorker s
     QThreadPool mThreadPool; ///< The Thread Pool
 
+    SslServer mTcpServer;
     int mServerPort; //< Server known port number
     int mServerUdpPort; //< Server udp base port number
     int mBasePort;
-    addressPortPair mActiveAddress[gMaxThreads]; ///< Active address pool addresses
-    QHash<QString, uint16_t> mActiveAddressPortPair;
+    addressPortNameTriple mActiveAddress[gMaxThreads]; ///< Active address pool addresses
+    //QHash<QString, uint16_t> mActiveAddressPortPair;
+    
+    bool mRequireAuth;
+    QString mCertFile;
+    QString mKeyFile;
+    QString mCredsFile;
+    QScopedPointer<Auth> mAuth;
 
     /// Boolean stop the execution of the thread
     volatile bool mStopped;
     static bool sSigInt;
+    QTimer mStopCheckTimer;
     int mTotalRunningThreads; ///< Number of Threads running in the pool
     QMutex mMutex;
     JackTrip::underrunModeT mUnderRunMode;
@@ -152,9 +173,16 @@ private:
     
     QStringList mHubPatchDescriptions;
     bool m_connectDefaultAudioPorts;
+    Patcher mPatcher;
 
     int mIOStatTimeout;
     QSharedPointer<std::ofstream> mIOStatStream;
+
+    int mBufferStrategy;
+    int mBroadcastQueue;
+    double mSimulatedLossRate;
+    double mSimulatedJitterRate;
+    double mSimulatedDelayRel;
     
 #ifdef WAIR // wair
     bool mWAIR;
@@ -164,10 +192,25 @@ public :
     void setWAIR(int b) {mWAIR = b;}
     bool isWAIR() {return mWAIR;}
 #endif // endwhere
-    void connectPatch(bool spawn);
+    void connectPatch(bool spawn, const QString &clientName);
 public :
+    void setRequireAuth(bool requireAuth) { mRequireAuth = requireAuth; }
+    void setCertFile(QString certFile) { mCertFile = certFile; }
+    void setKeyFile(QString keyFile) { mKeyFile = keyFile; }
+    void setCredsFile(QString credsFile) { mCredsFile = credsFile; }
+    
     unsigned int mHubPatch;
-    void setHubPatch(unsigned int p) {mHubPatch = p;}
+    void setHubPatch(unsigned int p)
+    {
+        mHubPatch = p;
+        mPatcher.setPatchMode(static_cast<JackTrip::hubConnectionModeT>(p));
+        //Set the correct audio port connection setting for our chosen patch mode.
+        if (mHubPatch == JackTrip::SERVERTOCLIENT) {
+            m_connectDefaultAudioPorts = true;
+        } else {
+            m_connectDefaultAudioPorts = false;
+        }
+    }
     unsigned int getHubPatch() {return mHubPatch;}
 
     void setUnderRunMode(JackTrip::underrunModeT UnderRunMode) { mUnderRunMode = UnderRunMode; }
@@ -175,6 +218,16 @@ public :
     
     void setIOStatTimeout(int timeout) { mIOStatTimeout = timeout; }
     void setIOStatStream(QSharedPointer<std::ofstream> statStream) { mIOStatStream = statStream; }
+
+    void setBufferStrategy(int BufferStrategy) { mBufferStrategy = BufferStrategy; }
+    void setNetIssuesSimulation(double loss, double jitter, double delay_rel)
+    {
+        mSimulatedLossRate = loss;
+        mSimulatedJitterRate = jitter;
+        mSimulatedDelayRel = delay_rel;
+    }
+    void setBroadcast(int broadcast_queue) {mBroadcastQueue = broadcast_queue;}
+
 };
 
 

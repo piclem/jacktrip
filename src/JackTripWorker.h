@@ -96,9 +96,20 @@ public:
     {
         return mID;
     }
+
+    void setBufferStrategy(int BufferStrategy) { mBufferStrategy = BufferStrategy; }
+    void setNetIssuesSimulation(double loss, double jitter, double delay_rel)
+    {
+        mSimulatedLossRate = loss;
+        mSimulatedJitterRate = jitter;
+        mSimulatedDelayRel = delay_rel;
+    }
+    void setBroadcast(int broadcast_queue) {mBroadcastQueue = broadcast_queue;}
     
     void setIOStatTimeout(int timeout) { mIOStatTimeout = timeout; }
     void setIOStatStream(QSharedPointer<std::ofstream> statStream) { mIOStatStream = statStream; }
+    
+    QString getAssignedClientName() { return mAssignedClientName; }
     
 private slots:
     void slotTest()
@@ -124,6 +135,7 @@ private:
     int mBufferQueueLength;
     JackTrip::underrunModeT mUnderRunMode;
     QString mClientName;
+    QString mAssignedClientName;
 
     /// Thread spawning internal lock.
     /// If true, the prototype is working on creating (spawning) a new thread
@@ -132,6 +144,12 @@ private:
 
     int mID; ///< ID thread number
     int mNumChans; ///< Number of Channels
+
+    int mBufferStrategy;
+    int mBroadcastQueue;
+    double mSimulatedLossRate;
+    double mSimulatedJitterRate;
+    double mSimulatedDelayRel;
     
     int mIOStatTimeout;
     QSharedPointer<std::ofstream> mIOStatStream;

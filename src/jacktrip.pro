@@ -136,6 +136,7 @@ HEADERS += DataProtocol.h \
            JackTripThread.h \
            JackTripWorker.h \
            JackTripWorkerMessages.h \
+           JitterBuffer.h \
            LoopBack.h \
            NetKS.h \
            PacketHeader.h \
@@ -150,7 +151,10 @@ HEADERS += DataProtocol.h \
            AudioInterface.h \
            compressordsp.h \
            limiterdsp.h \
-           freeverbdsp.h
+           freeverbdsp.h \
+           Patcher.h \
+           SslServer.h \
+           Auth.h
 
 !nojack {
 HEADERS += JackAudioInterface.h
@@ -167,6 +171,7 @@ SOURCES += DataProtocol.cpp \
            jacktrip_tests.cpp \
            JackTripThread.cpp \
            JackTripWorker.cpp \
+           JitterBuffer.cpp \
            LoopBack.cpp \
            PacketHeader.cpp \
            ProcessPlugin.cpp \
@@ -174,7 +179,10 @@ SOURCES += DataProtocol.cpp \
            Settings.cpp \
            UdpDataProtocol.cpp \
            UdpHubListener.cpp \
-           AudioInterface.cpp
+           AudioInterface.cpp \
+           Patcher.cpp \
+           SslServer.cpp \
+           Auth.cpp
 
 !nojack {
 SOURCES += JackAudioInterface.cpp

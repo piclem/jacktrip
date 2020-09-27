@@ -38,8 +38,10 @@
 #include "JackTrip.h"
 #include "UdpDataProtocol.h"
 #include "RingBufferWavetable.h"
+#include "JitterBuffer.h"
 #include "jacktrip_globals.h"
 #include "JackAudioInterface.h"
+#include "Auth.h"
 #ifdef __RT_AUDIO__
 #include "RtAudioInterface.h"
 #endif
@@ -53,6 +55,7 @@
 #include <QThread>
 #include <QTimer>
 #include <QDateTime>
+#include <QtEndian>
 
 using std::cout; using std::endl;
 
@@ -91,6 +94,8 @@ JackTrip::JackTrip(jacktripModeT JacktripMode,
     mNumNetRevChans(NumNetRevChans),
     #endif // endwhere
     mBufferQueueLength(BufferQueueLength),
+    mBufferStrategy(1),
+    mBroadcastQueueLength(0),
     mSampleRate(gDefaultSampleRate),
     mDeviceID(gDefaultDeviceID),
     mAudioBufferSize(gDefaultBufferSizeInSamples),
@@ -109,6 +114,7 @@ JackTrip::JackTrip(jacktripModeT JacktripMode,
     mSenderBindPort(sender_bind_port),
     mReceiverPeerPort(receiver_peer_port),
     mTcpServerPort(tcp_peer_port),
+    mUseAuth(false),
     mRedundancy(redundancy),
     mJackClientName(gJackDefaultClientName),
     mConnectionMode(JackTrip::NORMAL),
@@ -125,6 +131,9 @@ JackTrip::JackTrip(jacktripModeT JacktripMode,
     mConnectDefaultAudioPorts(true),
     mIOStatTimeout(0),
     mIOStatLogStream(std::cout.rdbuf()),
+    mSimulatedLossRate(0.0),
+    mSimulatedJitterRate(0.0),
+    mSimulatedDelayRel(0.0),
     mAudioTesterP(nullptr)
 {
     createHeader(mPacketHeaderType);
@@ -181,6 +190,9 @@ void JackTrip::setupAudio(
 
 #endif // endwhere
         mAudioInterface->setClientName(mJackClientName);
+        if (0 < mBroadcastQueueLength) {
+            mAudioInterface->enableBroadcastOutput();
+        }
 
         if (gVerboseFlag) std::cout << "  JackTrip:setupAudio before mAudioInterface->setup" << std::endl;
         mAudioInterface->setup();
@@ -224,6 +236,12 @@ void JackTrip::setupAudio(
     std::cout << "The Audio Buffer Size is: " << mAudioBufferSize << " samples" << std::endl;
     std::cout << "                      or: " << AudioBufferSizeInBytes
               << " bytes" << std::endl;
+    if (0 < mBroadcastQueueLength) {
+        std::cout << gPrintSeparator << std::endl;
+        cout << "Broadcast Output is enabled, delay = "
+             << mBroadcastQueueLength * mAudioBufferSize * 1000 / mSampleRate << " ms"
+             << " (" << mBroadcastQueueLength * mAudioBufferSize << " samples)" << endl;
+    }
     std::cout << gPrintSeparator << std::endl;
     cout << "The Number of Channels is: " << mAudioInterface->getNumInputChannels() << endl;
     std::cout << gPrintSeparator << std::endl;
@@ -246,11 +264,11 @@ void JackTrip::closeAudio()
 //*******************************************************************************
 void JackTrip::setupDataProtocol()
 {
+    double simulated_max_delay = mSimulatedDelayRel * getBufferSizeInSamples() / getSampleRate();
     // Create DataProtocol Objects
     switch (mDataProtocol) {
     case UDP:
         std::cout << "Using UDP Protocol" << std::endl;
-        std::cout << gPrintSeparator << std::endl;
         QThread::usleep(100);
         mDataProtocolSender = new UdpDataProtocol(this, DataProtocol::SENDER,
                                                   //mSenderPeerPort, mSenderBindPort,
@@ -259,6 +277,10 @@ void JackTrip::setupDataProtocol()
         mDataProtocolReceiver =  new UdpDataProtocol(this, DataProtocol::RECEIVER,
                                                      mReceiverBindPort, mReceiverPeerPort,
                                                      mRedundancy);
+        if (0.0 < mSimulatedLossRate || 0.0 < mSimulatedJitterRate || 0.0 < simulated_max_delay) {
+            mDataProtocolReceiver->setIssueSimulation(mSimulatedLossRate, mSimulatedJitterRate, simulated_max_delay);
+        }
+        std::cout << gPrintSeparator << std::endl;
         break;
     case TCP:
         throw std::invalid_argument("TCP Protocol is not implemented");
@@ -288,6 +310,12 @@ void JackTrip::setupRingBuffers()
     /// \todo Make all this operations cleaner
     //int total_audio_packet_size = getTotalAudioPacketSizeInBytes();
     int slot_size = getRingBuffersSlotSize();
+    if (0 <=  mBufferStrategy) {
+        mUnderRunMode = ZEROS;
+    }
+    else if (0 > mBufferQueueLength) {
+      throw std::invalid_argument("Auto queue is not supported by RingBuffer");
+    }
 
     switch (mUnderRunMode) {
     case WAVETABLE:
@@ -295,19 +323,31 @@ void JackTrip::setupRingBuffers()
                                                   gDefaultOutputQueueLength);
         mReceiveRingBuffer = new RingBufferWavetable(slot_size,
                                                      mBufferQueueLength);
+        mPacketHeader->setBufferRequiresSameSettings(true);
         /*
     mSendRingBuffer = new RingBufferWavetable(mAudioInterface->getSizeInBytesPerChannel() * mNumChans,
                 gDefaultOutputQueueLength);
     mReceiveRingBuffer = new RingBufferWavetable(mAudioInterface->getSizeInBytesPerChannel() * mNumChans,
              mBufferQueueLength);
              */
-
         break;
     case ZEROS:
         mSendRingBuffer = new RingBuffer(slot_size,
                                          gDefaultOutputQueueLength);
-        mReceiveRingBuffer = new RingBuffer(slot_size,
-                                            mBufferQueueLength);
+        if (0 > mBufferStrategy) {
+            mReceiveRingBuffer = new RingBuffer(slot_size,
+                                                mBufferQueueLength);
+            mPacketHeader->setBufferRequiresSameSettings(true);
+        }
+        else {
+            cout << "Using JitterBuffer strategy " << mBufferStrategy << endl;
+            if (0 > mBufferQueueLength) {
+                cout << "Using AutoQueue 1/" << -mBufferQueueLength << endl;
+            }
+            mReceiveRingBuffer = new JitterBuffer(mAudioBufferSize, mBufferQueueLength,
+                                        mSampleRate, mBufferStrategy,
+                                        mBroadcastQueueLength, mNumChans, mAudioBitResolution);
+        }
         /*
     mSendRingBuffer = new RingBuffer(mAudioInterface->getSizeInBytesPerChannel() * mNumChans,
              gDefaultOutputQueueLength);
@@ -394,7 +434,7 @@ void JackTrip::startProcess(
                      Qt::QueuedConnection);
     //QObject::connect(this, SIGNAL(signalUdpTimeOut()),
     //                 this, SLOT(slotStopProcesses()), Qt::QueuedConnection);
-    QObject::connect((UdpDataProtocol *)mDataProtocolReceiver, &UdpDataProtocol::signalUdpWaitingTooLong, this,
+    QObject::connect(static_cast<UdpDataProtocol *>(mDataProtocolReceiver), &UdpDataProtocol::signalUdpWaitingTooLong, this,
                      &JackTrip::slotUdpWaitingTooLong, Qt::QueuedConnection);
     QObject::connect(mDataProtocolSender, &DataProtocol::signalCeaseTransmission,
                      this, &JackTrip::slotStopProcessesDueToError, Qt::QueuedConnection);
@@ -403,8 +443,8 @@ void JackTrip::startProcess(
 
     //QObject::connect(mDataProtocolSender, SIGNAL(signalError(const char*)),
     //                 this, SLOT(slotStopProcesses()), Qt::QueuedConnection);
-    //QObject::connect(mDataProtocolReceiver, SIGNAL(signalError(const char*)),
-    //                 this, SLOT(slotStopProcesses()), Qt::QueuedConnection);
+    QObject::connect(mDataProtocolReceiver, &DataProtocol::signalError,
+                     this, &JackTrip::slotStopProcessesDueToError, Qt::QueuedConnection);
 
     // Start the threads for the specific mode
     // ---------------------------------------
@@ -484,7 +524,7 @@ void JackTrip::completeConnection()
     if (mIOStatTimeout > 0) {
         cout << "STATS" << mIOStatTimeout << endl;
         if (!mIOStatStream.isNull()) {
-            mIOStatLogStream.rdbuf(((std::ostream *)mIOStatStream.data())->rdbuf());
+            mIOStatLogStream.rdbuf((reinterpret_cast<std::ostream *>(mIOStatStream.data()))->rdbuf());
         }
         QTimer *timer = new QTimer(this);
         connect(timer, SIGNAL(timeout()), this, SLOT(onStatTimer()));
@@ -509,8 +549,6 @@ void JackTrip::onStatTimer()
         return;
     }
     QString now = QDateTime::currentDateTime().toString(Qt::ISODate);
-    int32_t skew = recv_io_stat.underruns - recv_io_stat.overflows
-                - pkt_stat.lost + pkt_stat.revived;
 
     static QMutex mutex;
     QMutexLocker locker(&mutex);
@@ -531,7 +569,18 @@ void JackTrip::onStatTimer()
       << "/" << pkt_stat.revived
       << " tot: "
       << pkt_stat.tot
-      << " skew: " << skew
+      << " sync: "
+      << recv_io_stat.level
+      << "/" << recv_io_stat.buf_inc_underrun
+      << "/" << recv_io_stat.buf_inc_compensate
+      << "/" << recv_io_stat.buf_dec_overflows
+      << "/" << recv_io_stat.buf_dec_pktloss
+      << " skew: " << recv_io_stat.skew
+      << "/" << recv_io_stat.skew_raw
+      << " bcast: " << recv_io_stat.broadcast_skew
+      << "/" << recv_io_stat.broadcast_delta
+      << " autoq: " << 0.1*recv_io_stat.autoq_corr
+      << "/" << 0.1*recv_io_stat.autoq_rate
       << endl;
 }
 
@@ -541,11 +590,21 @@ void JackTrip::receivedConnectionTCP()
     if (gVerboseFlag) cout << "TCP Socket Connected to Server!" << endl;
     emit signalTcpClientConnected();
 
+    // If we're planning to authenticate, signal the server.
+    if (mUseAuth) {
+        char port_buf[sizeof(qint32)];
+        qToLittleEndian<qint32>(Auth::OK, port_buf);
+        mTcpClient.write(port_buf, sizeof(port_buf));
+        if (gVerboseFlag) cout << "Auth request sent to Server" << endl;
+        return;
+    }
     // Send Client Port Number to Server
     // ---------------------------------
-    char port_buf[sizeof(mReceiverBindPort) + gMaxRemoteNameLength];
-    std::memcpy(port_buf, &mReceiverBindPort, sizeof(mReceiverBindPort));
-    std::memset(port_buf + sizeof(mReceiverBindPort), 0, gMaxRemoteNameLength);
+    char port_buf[sizeof(qint32) + gMaxRemoteNameLength];
+    qToLittleEndian<qint32>(mReceiverBindPort, port_buf);
+    //std::memcpy(port_buf, &mReceiverBindPort, sizeof(mReceiverBindPort));
+    
+    std::memset(port_buf + sizeof(qint32), 0, gMaxRemoteNameLength);
     if (!mRemoteClientName.isEmpty()) {
         //If our remote client name is set, send it too.
         QByteArray name = mRemoteClientName.toUtf8();
@@ -561,7 +620,7 @@ void JackTrip::receivedConnectionTCP()
             }
         }
         name.truncate(length);
-        std::memcpy(port_buf + sizeof(mReceiverBindPort), name.data(), length + 1);
+        std::memcpy(port_buf + sizeof(qint32), name.data(), length + 1);
     }
 
     mTcpClient.write(port_buf, sizeof(port_buf));
@@ -574,7 +633,44 @@ void JackTrip::receivedConnectionTCP()
 
 void JackTrip::receivedDataTCP()
 {
-    if (mTcpClient.bytesAvailable() < (int)sizeof(uint16_t)) {
+    if (mUseAuth && !mTcpClient.isEncrypted()) {
+        // If we're using authentication and haven't established a secure connection yet
+        // check that our server supports it.
+        qint32 authResponse;
+        int size = sizeof(authResponse);
+        char auth_buf[size];
+        mTcpClient.read(auth_buf, size);
+        authResponse = qFromLittleEndian<qint32>(auth_buf);
+        if (authResponse == Auth::OK) {
+            mTcpClient.startClientEncryption();
+        } else {
+            if (authResponse == Auth::NOTREQUIRED) {
+                std::cout << "ERROR: The Server does not require authentication." << std::endl;
+                stop("The server does not require authentication");
+            } else {
+                std::cout << "ERROR: The Server does not support authentication." << std::endl;
+                stop("The server does not support authentication");
+                //Send a header sized packet to the server so we don't lock up the main/UdpHubListener thread on the
+                //server. (Prevents a denial of service.) TODO: This should ultimately be fixed server side,
+                //but work around it here so we don't interfere with older deployments.
+                if (mUdpSockTemp.bind(QHostAddress::Any, mReceiverBindPort, QUdpSocket::DefaultForPlatform)) {
+                    QThread::msleep(100);
+                    DefaultHeader temp(nullptr);
+                    size = temp.getHeaderSizeInBytes();
+                    int8_t* header = new int8_t[size];
+                    //The header doesn't need to make sense, it just has to be non-zero so we don't cause any
+                    //divide by zero errors on the other end.
+                    memset(header, 1, size);
+                    mUdpSockTemp.writeDatagram((const char *)header, size, mTcpClient.peerAddress(), authResponse);
+                    mUdpSockTemp.close();
+                }
+            }
+            mTcpClient.close();
+        }
+        return;
+    }
+    
+    if (mTcpClient.bytesAvailable() < (int)sizeof(qint32)) {
         return;
     }
     
@@ -587,16 +683,42 @@ void JackTrip::receivedDataTCP()
     // --------------------------------
     uint32_t udp_port;
     int size = sizeof(udp_port);
-    char port_buf[sizeof(mReceiverBindPort)];
-    //char port_buf[size];
+    char port_buf[size];
     mTcpClient.read(port_buf, size);
-    std::memcpy(&udp_port, port_buf, size);
+    udp_port = qFromLittleEndian<qint32>(port_buf);
+    //std::memcpy(&udp_port, port_buf, size);
     //cout << "Received UDP Port Number: " << udp_port << endl;
 
     // Close the TCP Socket
     // --------------------
     mTcpClient.close(); // Close the socket
     //cout << "TCP Socket Closed!" << endl;
+    
+    // If we sent authentication data, check if our authentication attempt was succesfull
+    if (mUseAuth && udp_port > 65535) {
+        QString error_message;
+        if (udp_port == Auth::WRONGCREDS) {
+            error_message = "Incorrect username or password.";
+        } else if (udp_port == Auth::WRONGTIME) {
+            error_message = "You are not authorized to access the server at this time.";
+        } else {
+            error_message = "Unknown authentication error.";
+        }
+        std::cout << "ERROR: " << error_message.toStdString() << std::endl;
+        stop(error_message);
+        return;
+    } else if (udp_port > 65535) {
+        QString error_message;
+        if (udp_port == Auth::REQUIRED) {
+            error_message = "The server you are attempting to connect to requires authentication.";
+        } else {
+            error_message = "Unknown authentication error.";
+        }
+        std::cout << "ERROR: " << error_message.toStdString() << std::endl;
+        stop(error_message);
+        return;
+    }
+    
     if (gVerboseFlag) cout << "Connection Succesfull!" << endl;
 
     // Set with the received UDP port
@@ -610,6 +732,51 @@ void JackTrip::receivedDataTCP()
     cout << gPrintSeparator << endl;
     completeConnection();
 }
+
+void JackTrip::connectionSecured()
+{
+    //Now that the connection is encrypted, send out port, and credentials.
+    //(Remember to include an additional 2 bytes for the username and password terminators.)
+    QByteArray username = mUsername.toUtf8();
+    QByteArray password = mPassword.toUtf8();
+    int size = (sizeof(qint32) * 3) + gMaxRemoteNameLength + username.length() + password.length() + 2;
+    char *buf = new char[size];
+    int location = sizeof(qint32);
+    std::memset(buf, 0, size);
+    qToLittleEndian<qint32>(mReceiverBindPort, buf);
+    
+    if (!mRemoteClientName.isEmpty()) {
+        //If our remote client name is set, send it too.
+        QByteArray name = mRemoteClientName.toUtf8();
+        // Find a clean place to truncate if we're over length.
+        // (Make sure we're not in the middle of a multi-byte character.)
+        int length = name.length();
+        //Need to take the final null terminator into account here.
+        if (length > gMaxRemoteNameLength - 1) {
+            length = gMaxRemoteNameLength - 1;
+            while ((length > 0) && ((name.at(length) & 0xc0) == 0x80)) {
+                //We're in the middle of a multi-byte character. Work back.
+                length--;
+            }
+        }
+        name.truncate(length);
+        std::memcpy(buf + location, name.data(), length + 1);
+    }
+    location += gMaxRemoteNameLength;
+    
+    qToLittleEndian<qint32>(username.length(), buf + location);
+    location += sizeof(qint32);
+    qToLittleEndian<qint32>(password.length(), buf + location);
+    location += sizeof(qint32);
+    
+    std::memcpy(buf + location, username.data(), username.length() + 1);
+    location += username.length() + 1;
+    std::memcpy(buf + location, password.data(), password.length() + 1);
+    
+    mTcpClient.write(buf, size);
+    if (gVerboseFlag) cout << "Port " << mReceiverBindPort << " sent to Server with credentials" << endl;
+}
+
 
 void JackTrip::receivedDataUDP()
 {
@@ -818,6 +985,25 @@ int JackTrip::clientPingToServerStart()
         throw std::invalid_argument("Peer Address has to be set if you run in CLIENTTOPINGSERVER mode");
         return -1;
     }
+    
+    // If we're using authentication, check that SSL support is available.
+    if (mUseAuth) {
+        if (!QSslSocket::supportsSsl()) {
+            QString error_message = "SSL not supported. Make sure you have the appropriate SSL libraries\ninstalled to enable authentication.";
+            std::cerr << "ERROR: " << error_message.toStdString() << std::endl;
+            stop(error_message);
+            return -1;
+        } else  if (mUsername.isEmpty() || mPassword.isEmpty()) {
+            QString error_message = "You must supply a username and password to authenticate with a hub server.";
+            std::cerr << "ERROR: " << error_message.toStdString() << std::endl;
+            stop(error_message);
+            return -1;
+        } else {
+            // At the moment, don't verify the certificate so we can use self signed ones.
+            mTcpClient.setPeerVerifyMode(QSslSocket::VerifyNone);
+            QObject::connect(&mTcpClient, &QSslSocket::encrypted, this, &JackTrip::connectionSecured, Qt::QueuedConnection);
+        }
+    }
 
     // Create Socket Objects
     // --------------------
@@ -1012,9 +1198,9 @@ void JackTrip::parseAudioPacket(int8_t* full_packet, int8_t* audio_packet)
 }
 
 //*******************************************************************************
-void JackTrip::checkPeerSettings(int8_t* full_packet)
+bool JackTrip::checkPeerSettings(int8_t* full_packet)
 {
-    mPacketHeader->checkPeerSettings(full_packet);
+    return mPacketHeader->checkPeerSettings(full_packet);
 }
 
 

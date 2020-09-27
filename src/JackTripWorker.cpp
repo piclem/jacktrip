@@ -76,6 +76,11 @@ JackTripWorker::JackTripWorker(UdpHubListener* udphublistener, int BufferQueueLe
     setAutoDelete(false); // stick around after calling run()
     //mNetks = new NetKS;
     //mNetks->play();
+    mBufferStrategy = 1;
+    mBroadcastQueue = 0;
+    mSimulatedLossRate = 0.0;
+    mSimulatedJitterRate = 0.0;
+    mSimulatedDelayRel = 0.0;
 }
 
 
@@ -216,6 +221,10 @@ void JackTripWorker::run()
         jacktrip.setPeerAddress(mClientAddress);
         jacktrip.setBindPorts(mServerPort);
         //jacktrip.setPeerPorts(mClientPort);
+        jacktrip.setBufferStrategy(mBufferStrategy);
+        jacktrip.setNetIssuesSimulation(mSimulatedLossRate,
+            mSimulatedJitterRate, mSimulatedDelayRel);
+        jacktrip.setBroadcast(mBroadcastQueue);
 
         if (gVerboseFlag) cout << "---> JackTripWorker: setJackTripFromClientHeader..." << endl;
         int PeerConnectionMode = setJackTripFromClientHeader(jacktrip);
@@ -232,6 +241,7 @@ void JackTripWorker::run()
                     mID
             #endif // endwhere
                     );
+        mAssignedClientName = jacktrip.getAssignedClientName();
         // if (gVerboseFlag) cout << "---> JackTripWorker: start..." << endl;
         // jacktrip.start(); // ########### JamTest Only #################
 

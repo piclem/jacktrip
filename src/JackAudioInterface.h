@@ -104,9 +104,13 @@ public:
     { std::cout << "WARNING: Setting the Sample Rate in Jack mode has no effect." << std::endl; }
     virtual void setBufferSizeInSamples(uint32_t /*buf_size*/)
     { std::cout << "WARNING: Setting the Sample Rate in Jack mode has no effect." << std::endl; }
+    virtual void enableBroadcastOutput() {mBroadcast = true;}
     //------------------------------------------------------------------
 
     //--------------GETTERS---------------------------------------------
+    /// \brief Get the actual client name assigned by the Jack server
+    virtual QString getAssignedClientName()
+    { return mAssignedClientName; }
     /// \brief Get the Jack Server Sampling Rate, in samples/second
     virtual uint32_t getSampleRate() const;
     /// \brief Get the Jack Server Buffer Size, in samples
@@ -175,10 +179,14 @@ private:
 
     jack_client_t* mClient; ///< Jack Client
     QString mClientName; ///< Jack Client Name
+    QString mAssignedClientName;
     QVarLengthArray<jack_port_t*> mInPorts; ///< Vector of Input Ports (Channels)
     QVarLengthArray<jack_port_t*> mOutPorts; ///< Vector of Output Ports (Channels)
+    QVarLengthArray<jack_port_t*> mBroadcastPorts; ///< Vector of Output Ports (Channels)
     QVarLengthArray<sample_t*> mInBuffer; ///< Vector of Input buffers/channel read from JACK
     QVarLengthArray<sample_t*> mOutBuffer; ///< Vector of Output buffer/channel to write to JACK
+    QVarLengthArray<sample_t*> mBroadcastBuffer; ///< Vector of Output buffer/channel to write to JACK
+    bool mBroadcast;
     size_t mSizeInBytesPerChannel; ///< Size in bytes per audio channel
     QVector<ProcessPlugin*> mProcessPlugins; ///< Vector of ProcesPlugin<EM>s</EM>
     JackTrip* mJackTrip; ///< JackTrip mediator class
