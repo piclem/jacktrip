@@ -47,6 +47,7 @@
     #include <mach/mach.h>
     #include <mach/mach_time.h>
     #include <mach/thread_policy.h>
+    #include <sys/qos.h>
 #endif //__MAC_OSX__
 
 #include "jacktrip_globals.h"
@@ -60,7 +61,10 @@
 
 // Enables time-contraint policy and priority suitable for low-latency,
 // glitch-resistant audio.
-void setRealtimeProcessPriority() {
+void setRealtimeProcessPriority(int bufferSize, int sampleRate) {
+    // Set thread QoS to allow maximum performance.
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+
     // Increase thread priority to real-time.
 
     // Please note that the thread_policy_set() calls may fail in
@@ -102,14 +106,15 @@ void setRealtimeProcessPriority() {
     // means the scheduler would give half the time to the thread.
     // These values have empirically been found to yield good behavior.
     // Good means that audio performance is high and other threads won't starve.
-    const double kGuaranteedAudioDutyCycle = 0.75;
+    //const double kGuaranteedAudioDutyCycle = 0.75;
+    const double kGuaranteedAudioDutyCycle = 0.5;
     const double kMaxAudioDutyCycle = 0.85;
 
     // Define constants determining how much time the audio thread can
     // use in a given time quantum.  All times are in milliseconds.
 
-    // About 128 frames @44.1KHz
-    const double kTimeQuantum = 2.9;
+    // Work out how many milliseconds we have in each buffer cycle
+    const double kTimeQuantum = 1000 * (double)bufferSize / (double)sampleRate;
 
     // Time guaranteed each quantum.
     const double kAudioTimeNeeded = kGuaranteedAudioDutyCycle * kTimeQuantum;
