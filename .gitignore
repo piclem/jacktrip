@@ -10,3 +10,7 @@ site/
 
 # macOS files
 .DS_Store
+
+# clangd cache
+.cache
+
