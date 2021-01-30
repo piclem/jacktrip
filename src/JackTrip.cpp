@@ -48,7 +48,6 @@
 #include "RtAudioInterface.h"
 #endif
 
-
 #include <QDateTime>
 #include <QHostAddress>
 #include <QHostInfo>
@@ -680,7 +679,6 @@ void JackTrip::receivedDataTCP()
     //cout << "TCP Socket Closed!" << endl;
 
     if (gVerboseFlag) { std::cout << "Connection Successful!\n"; }
-
 
     // Set with the received UDP port
     // ------------------------------
