@@ -72,7 +72,7 @@ bool JackTrip::sJackStopped = false;
 
 //*******************************************************************************
 JackTrip::JackTrip(jacktripModeT JacktripMode, dataProtocolT DataProtocolType,
-                   int NumChans,
+                   int NumChansIn, int NumChansOut,
 #ifdef WAIR  // WAIR
                    int NumNetRevChans,
 #endif  // endwhere
@@ -86,13 +86,12 @@ JackTrip::JackTrip(jacktripModeT JacktripMode, dataProtocolT DataProtocolType,
     , mDataProtocol(DataProtocolType)
     , mPacketHeaderType(PacketHeaderType)
     , mAudiointerfaceMode(JackTrip::JACK)
-    , mNumChans(NumChans)
-    ,
+    , mNumChansIn(NumChansIn)
+    , mNumChansOut(NumChansOut)
 #ifdef WAIR  // WAIR
-    mNumNetRevChans(NumNetRevChans)
-    ,
+    , mNumNetRevChans(NumNetRevChans)
 #endif  // endwhere
-    mBufferQueueLength(BufferQueueLength)
+    , mBufferQueueLength(BufferQueueLength)
     , mBufferStrategy(1)
     , mBroadcastQueueLength(0)
     , mSampleRate(gDefaultSampleRate)
@@ -173,7 +172,7 @@ void JackTrip::setupAudio(
         if (gVerboseFlag)
             std::cout << "  JackTrip:setupAudio before new JackAudioInterface"
                       << std::endl;
-        mAudioInterface = new JackAudioInterface(this, mNumChans, mNumChans,
+        mAudioInterface = new JackAudioInterface(this, mNumChansIn, mNumChansOut,
 #ifdef WAIR  // wair
                                                  mNumNetRevChans,
 #endif  // endwhere
@@ -215,7 +214,7 @@ void JackTrip::setupAudio(
 #ifdef __RT_AUDIO__
         cout << "Warning: using non jack version, RtAudio will be used instead" << endl;
         mAudioInterface =
-            new RtAudioInterface(this, mNumChans, mNumChans, mAudioBitResolution);
+            new RtAudioInterface(this, mNumChansIn, mNumChansOut, mAudioBitResolution);
         mAudioInterface->setSampleRate(mSampleRate);
         mAudioInterface->setDeviceID(mDeviceID);
         mAudioInterface->setBufferSizeInSamples(mAudioBufferSize);
@@ -225,7 +224,7 @@ void JackTrip::setupAudio(
     } else if (mAudiointerfaceMode == JackTrip::RTAUDIO) {
 #ifdef __RT_AUDIO__
         mAudioInterface =
-            new RtAudioInterface(this, mNumChans, mNumChans, mAudioBitResolution);
+            new RtAudioInterface(this, mNumChansIn, mNumChansOut, mAudioBitResolution);
         mAudioInterface->setSampleRate(mSampleRate);
         mAudioInterface->setDeviceID(mDeviceID);
         mAudioInterface->setBufferSizeInSamples(mAudioBufferSize);
