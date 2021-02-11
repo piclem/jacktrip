@@ -358,7 +358,7 @@ int JackTripWorker::setJackTripFromClientHeader(JackTrip& jacktrip)
         cout << "--->JackTripWorker: getPeerConnectionMode = " << PeerConnectionMode
              << endl;
 
-    jacktrip.setNumChannels(PeerNumChannels);
+    jacktrip.setNumOutputChannels(PeerNumChannels);
     return PeerConnectionMode;
 }
 
