@@ -72,7 +72,7 @@ JackTripWorker::JackTripWorker(UdpHubListener* udphublistener, int BufferQueueLe
 
 //*******************************************************************************
 void JackTripWorker::setJackTrip(int id, QString client_address, uint16_t server_port,
-                                 uint16_t client_port, int num_channels,
+                                 uint16_t client_port,
                                  bool connectDefaultAudioPorts)
 {
     {  // Start Spawning, so lock mSpawning
@@ -80,12 +80,9 @@ void JackTripWorker::setJackTrip(int id, QString client_address, uint16_t server
         mSpawning = true;
     }
     mID = id;
-    // Set the jacktrip address and ports
-    // mClientAddress.setAddress(client_address);
     mClientAddress             = client_address;
     mServerPort                = server_port;
     mClientPort                = client_port;
-    mNumChans                  = num_channels;
     m_connectDefaultAudioPorts = connectDefaultAudioPorts;
 }
 
@@ -134,11 +131,11 @@ void JackTripWorker::run()
         //        qDebug() << "is WAIR?" <<  tmp ;
         qDebug() << "mNumNetRevChans" << mNumNetRevChans;
 
-        JackTrip jacktrip(JackTrip::SERVERPINGSERVER, JackTrip::UDP, mNumChans,
+        JackTrip jacktrip(JackTrip::SERVERPINGSERVER, JackTrip::UDP, 1, 1,
                           mNumNetRevChans, FORCEBUFFERQ);
         JackTrip* mJackTrip = &jacktrip;
 #else  // endwhere
-        JackTrip jacktrip(JackTrip::SERVERPINGSERVER, JackTrip::UDP, mNumChans,
+        JackTrip jacktrip(JackTrip::SERVERPINGSERVER, JackTrip::UDP, 1, 1,
                           mBufferQueueLength);
 #endif  // not wair
 
@@ -215,8 +212,8 @@ void JackTripWorker::run()
 
         if (gVerboseFlag)
             cout << "---> JackTripWorker: setJackTripFromClientHeader..." << endl;
-        int PeerConnectionMode = setJackTripFromClientHeader(jacktrip);
-        if (PeerConnectionMode == -1) {
+
+        if (-1 == setJackTripFromClientHeader(jacktrip)) {
             mUdpHubListener->releaseThread(mID);
             {
                 QMutexLocker locker(&mMutex);
@@ -319,6 +316,8 @@ int JackTripWorker::setJackTripFromClientHeader(JackTrip& jacktrip)
     char packet[packet_size];
     UdpSockTemp.readDatagram(packet, packet_size);
     UdpSockTemp.close();  // close the socket
+
+    // TODO Why is this a pointer to int8_t?
     int8_t* full_packet = reinterpret_cast<int8_t*>(packet);
 
     int PeerBufferSize          = jacktrip.getPeerBufferSize(full_packet);
@@ -337,9 +336,19 @@ int JackTripWorker::setJackTripFromClientHeader(JackTrip& jacktrip)
              << "\n";
     }
 
-    jacktrip.setNumInputChannels(PeerNumIncomingChannels);
-    jacktrip.setNumOutputChannels(PeerNumOutgoingChannels);
-    return 0;
+    // The header field for NumOutgoingChannels was used for the ConnectionMode.
+    // Only the first Mode was used (NORMAL == 0). If this field is set to 0, we
+    // can assume the peer is using an old version, and the last field doesn't reflect the
+    // number of Outgoing Channels.
+    if (JackTrip::NORMAL == PeerNumOutgoingChannels) {
+        jacktrip.setNumInputChannels(PeerNumIncomingChannels);
+        jacktrip.setNumOutputChannels(PeerNumIncomingChannels);
+    } else {
+        jacktrip.setNumInputChannels(PeerNumIncomingChannels);
+        jacktrip.setNumOutputChannels(PeerNumOutgoingChannels);
+    }
+
+    return PeerNumOutgoingChannels;
 }
 
 //*******************************************************************************
