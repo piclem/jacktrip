@@ -135,7 +135,7 @@ void JackTripWorker::run()
         // Create and setup JackTrip Object
         //JackTrip jacktrip(JackTrip::SERVER, JackTrip::UDP, mNumChans, 2);
         if (gVerboseFlag)
-            cout << "---> JackTripWorker: Creating jacktrip objects..." << endl;
+            cout << "---> JackTripWorker: Creating jacktrip objects..." << "\n";
 
 #ifdef WAIR  // WAIR
             // forces    BufferQueueLength to 2
@@ -166,8 +166,8 @@ void JackTripWorker::run()
 #ifdef WAIR  // WAIR
         // Add Plugins
         if (mWAIR) {
-            cout << "Running in WAIR Mode..." << endl;
-            cout << gPrintSeparator << std::endl;
+            cout << "Running in WAIR Mode..." << "\n";
+            cout << gPrintSeparator << "\n";
             switch (mNumNetRevChans) {
             case 16:  // freeverb
                 mJackTrip->appendProcessPluginFromNetwork(
@@ -343,23 +343,20 @@ int JackTripWorker::setJackTripFromClientHeader(JackTrip& jacktrip)
     int PeerBufferSize     = jacktrip.getPeerBufferSize(full_packet);
     int PeerSamplingRate   = jacktrip.getPeerSamplingRate(full_packet);
     int PeerBitResolution  = jacktrip.getPeerBitResolution(full_packet);
-    int PeerNumChannels    = jacktrip.getPeerNumChannels(full_packet);
-    int PeerConnectionMode = jacktrip.getPeerConnectionMode(full_packet);
+    int PeerNumIncomingChannels    = jacktrip.getPeerNumIncomingChannels(full_packet);
+    int PeerNumOutgoingChannels    = jacktrip.getPeerNumOutgoingChannels(full_packet);
 
-    if (gVerboseFlag)
-        cout << "--->JackTripWorker: getPeerBufferSize = " << PeerBufferSize << endl;
-    if (gVerboseFlag)
-        cout << "--->JackTripWorker: getPeerSamplingRate = " << PeerSamplingRate << endl;
-    if (gVerboseFlag)
-        cout << "--->JackTripWorker: getPeerBitResolution = " << PeerBitResolution
-             << endl;
-    cout << "--->JackTripWorker: PeerNumChannels = " << PeerNumChannels << endl;
-    if (gVerboseFlag)
-        cout << "--->JackTripWorker: getPeerConnectionMode = " << PeerConnectionMode
-             << endl;
+    if (gVerboseFlag) {
+        std::cout << "--->JackTripWorker: getPeerBufferSize = " << PeerBufferSize << "\n"
+             << "--->JackTripWorker: getPeerSamplingRate = " << PeerSamplingRate << "\n"
+             << "--->JackTripWorker: getPeerBitResolution = " << PeerBitResolution << "\n"
+             << "--->JackTripWorker: PeerNumIncomingChannels = " << PeerNumIncomingChannels << "\n"
+             << "--->JackTripWorker: PeerNumOutgoingChannels = " << PeerNumOutgoingChannels << "\n";
+    }
 
-    jacktrip.setNumOutputChannels(PeerNumChannels);
-    return PeerConnectionMode;
+    jacktrip.setNumInputChannels(PeerNumIncomingChannels);
+    jacktrip.setNumOutputChannels(PeerNumOutgoingChannels);
+    return 0;
 }
 
 //*******************************************************************************
