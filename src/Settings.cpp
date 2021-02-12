@@ -69,6 +69,8 @@ enum JTLongOptIDS {
     OPT_SIMJITTER,
     OPT_BROADCAST,
     OPT_RTUDPPRIORITY,
+    OPT_NUMINCOMING,
+    OPT_NUMOUTGOING
 };
 
 //*******************************************************************************
@@ -90,6 +92,8 @@ void Settings::parseInput(int argc, char** argv)
         // These options don't set a flag.
         {"numchannels", required_argument, NULL,
          'n'},  // Number of input and output channels
+        {"numincoming", required_argument, NULL, OPT_NUMINCOMING}, // Number of incoming channels
+        {"numoutgoing", required_argument, NULL, OPT_NUMOUTGOING}, // Number of outgoing channels
 #ifdef WAIR     // WAIR
         {"wair", no_argument, NULL, 'w'},  // Run in LAIR mode, sets numnetrevchannels
         {"addcombfilterlength", required_argument, NULL,
@@ -157,6 +161,12 @@ void Settings::parseInput(int argc, char** argv)
                 NULL))
            != -1)
         switch (ch) {
+        case OPT_NUMINCOMING:
+            mNumChansOut = atoi(optarg);
+            break;
+        case OPT_NUMOUTGOING:
+            mNumChansIn = atoi(optarg);
+            break;
         case 'n':  // Number of input and output channels
             //-------------------------------------------------------
             mNumChansIn = atoi(optarg);
@@ -569,6 +579,8 @@ void Settings::printUsage()
     cout << " -n, --numchannels #                      Number of Input and Output "
             "Channels (default: "
          << 2 << ")" << endl;
+    cout << "     --numincoming #                      Number of incoming Channels from the network\n";
+    cout << "     --numoutgoing #                      Number of incoming Channels from the network\n";
 #ifdef WAIR  // WAIR
     cout << " -w, --wair                               Run in WAIR Mode" << endl;
     cout << " -N, --addcombfilterlength #              comb length adjustment for WAIR "
