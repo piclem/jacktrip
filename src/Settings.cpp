@@ -92,9 +92,11 @@ void Settings::parseInput(int argc, char** argv)
         // These options don't set a flag.
         {"numchannels", required_argument, NULL,
          'n'},  // Number of input and output channels
-        {"numincoming", required_argument, NULL, OPT_NUMINCOMING}, // Number of incoming channels
-        {"numoutgoing", required_argument, NULL, OPT_NUMOUTGOING}, // Number of outgoing channels
-#ifdef WAIR     // WAIR
+        {"numincoming", required_argument, NULL,
+         OPT_NUMINCOMING},  // Number of incoming channels
+        {"numoutgoing", required_argument, NULL,
+         OPT_NUMOUTGOING},  // Number of outgoing channels
+#ifdef WAIR                 // WAIR
         {"wair", no_argument, NULL, 'w'},  // Run in LAIR mode, sets numnetrevchannels
         {"addcombfilterlength", required_argument, NULL,
          'N'},                                                 // added comb filter length
@@ -169,7 +171,7 @@ void Settings::parseInput(int argc, char** argv)
             break;
         case 'n':  // Number of input and output channels
             //-------------------------------------------------------
-            mNumAudioInputChans = atoi(optarg);
+            mNumAudioInputChans  = atoi(optarg);
             mNumAudioOutputChans = atoi(optarg);
             break;
         case 'U':  // UDP Bind Port
@@ -180,7 +182,8 @@ void Settings::parseInput(int argc, char** argv)
             //-------------------------------------------------------
             mWAIR = true;
             mNumNetRevChans =
-                gDefaultNumNetRevChannels;  // fixed amount sets number of network channels and comb filters for WAIR
+                gDefaultNumNetRevChannels;  // fixed amount sets number of network
+                                            // channels and comb filters for WAIR
             break;
         case 'N':
             //-------------------------------------------------------
@@ -515,7 +518,8 @@ void Settings::parseInput(int argc, char** argv)
     }
 
     assert(mNumAudioInputChans > 0);
-    mAudioTester.setSendChannel(mNumAudioInputChans - 1);  // use last channel for latency testing
+    mAudioTester.setSendChannel(mNumAudioInputChans
+                                - 1);  // use last channel for latency testing
     // Originally, testing only in the last channel was adopted
     // because channel 0 ("left") was a clap track on CCRMA loopback
     // servers.  Now, however, we also do it in order to easily keep
@@ -538,8 +542,8 @@ void Settings::parseInput(int argc, char** argv)
                          "server modes (-S and -s).\n\n";
         }
         mEffects.setNoLimiters();
-        // don't exit since an outgoing limiter should be the default (could exit for incoming case):
-        // std::exit(1);
+        // don't exit since an outgoing limiter should be the default (could exit for
+        // incoming case): std::exit(1);
     }
     if (mAudioTester.getEnabled() && haveSomeServerMode) {
         std::cerr << "*** --examine-audio-delay (-x) ERROR: Audio latency measurement "
@@ -549,7 +553,8 @@ void Settings::parseInput(int argc, char** argv)
     if (mAudioTester.getEnabled() && (mAudioBitResolution != AudioInterface::BIT16)
         && (mAudioBitResolution
             != AudioInterface::BIT32)) {  // BIT32 not tested but should be ok
-        // BIT24 should work also, but there's a comment saying it's broken right now, so exclude it
+        // BIT24 should work also, but there's a comment saying it's broken right now, so
+        // exclude it
         std::cerr << "*** --examine-audio-delay (-x) ERROR: Only --bitres (-b) 16 and 32 "
                      "presently supported for audio latency measurement.\n\n";
         std::exit(1);
@@ -579,8 +584,10 @@ void Settings::printUsage()
     cout << " -n, --numchannels #                      Number of Input and Output "
             "Channels (default: "
          << 2 << ")" << endl;
-    cout << "     --numincoming #                      Number of incoming Channels from the network\n";
-    cout << "     --numoutgoing #                      Number of incoming Channels from the network\n";
+    cout << "     --numincoming #                      Number of incoming Channels from "
+            "the network\n";
+    cout << "     --numoutgoing #                      Number of incoming Channels from "
+            "the network\n";
 #ifdef WAIR  // WAIR
     cout << " -w, --wair                               Run in WAIR Mode" << endl;
     cout << " -N, --addcombfilterlength #              comb length adjustment for WAIR "
@@ -711,7 +718,7 @@ UdpHubListener* Settings::getConfiguredHubServer()
     if (gVerboseFlag)
         std::cout << "JackTrip HUB SERVER TCP Bind Port: " << mBindPortNum << std::endl;
     UdpHubListener* udpHub = new UdpHubListener(mBindPortNum, mServerUdpPortNum);
-    //udpHub->setSettings(this);
+    // udpHub->setSettings(this);
 #ifdef WAIR  // WAIR
     udpHub->setWAIR(mWAIR);
 #endif  // endwhere
@@ -824,8 +831,8 @@ JackTrip* Settings::getConfiguredJackTrip()
     if (mLoopBack) {
         cout << "Running in Loop-Back Mode..." << endl;
         cout << gPrintSeparator << std::endl;
-        //std::tr1::shared_ptr<LoopBack> loopback(new LoopBack(mNumChans));
-        //mJackTrip->appendProcessPlugin(loopback.get());
+        // std::tr1::shared_ptr<LoopBack> loopback(new LoopBack(mNumChans));
+        // mJackTrip->appendProcessPlugin(loopback.get());
 
 #if 0  // previous technique:
         LoopBack* loopback = new LoopBack(mNumChans);
@@ -835,12 +842,12 @@ JackTrip* Settings::getConfiguredJackTrip()
 #endif
 
         // ----- Test Karplus Strong -----------------------------------
-        //std::tr1::shared_ptr<NetKS> loopback(new NetKS());
-        //mJackTrip->appendProcessPlugin(loopback);
-        //loopback->play();
-        //NetKS* netks = new NetKS;
-        //mJackTrip->appendProcessPlugin(netks);
-        //netks->play();
+        // std::tr1::shared_ptr<NetKS> loopback(new NetKS());
+        // mJackTrip->appendProcessPlugin(loopback);
+        // loopback->play();
+        // NetKS* netks = new NetKS;
+        // mJackTrip->appendProcessPlugin(netks);
+        // netks->play();
         // -------------------------------------------------------------
     }
 

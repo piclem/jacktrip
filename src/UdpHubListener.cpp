@@ -58,13 +58,13 @@ bool UdpHubListener::sSigInt = false;
 UdpHubListener::UdpHubListener(int server_port, int server_udp_port)
     : mTcpServer(this)
     , mServerPort(server_port)
-    , mServerUdpPort(server_udp_port)  //final udp base port number
+    , mServerUdpPort(server_udp_port)  // final udp base port number
     , mStopped(false)
 
 #ifdef WAIR  // wair
     , mWAIR(false)
 #endif  // endwhere
-    ,mTotalRunningThreads(0)
+    , mTotalRunningThreads(0)
     , mHubPatchDescriptions({"server-to-clients", "client loopback",
                              "client fan out/in but not loopback", "reserved for TUB",
                              "full mix", "no auto patching"})
@@ -72,7 +72,7 @@ UdpHubListener::UdpHubListener(int server_port, int server_udp_port)
     , mIOStatTimeout(0)
 {
     // Register JackTripWorker with the hub listener
-    //mJTWorker = new JackTripWorker(this);
+    // mJTWorker = new JackTripWorker(this);
     mJTWorkers = new QVector<JackTripWorker*>;
     for (int i = 0; i < gMaxThreads; i++) { mJTWorkers->insert(i, NULL); }
 
@@ -80,7 +80,7 @@ UdpHubListener::UdpHubListener(int server_port, int server_udp_port)
     mThreadPool.setMaxThreadCount(mThreadPool.maxThreadCount() * 16);
     qDebug() << "mThreadPool maxThreadCount set to" << mThreadPool.maxThreadCount();
 
-    //mJTWorkers = new JackTripWorker(this);
+    // mJTWorkers = new JackTripWorker(this);
     mThreadPool.setExpiryTimeout(3000);  // msec (-1) = forever
     // Inizialize IP addresses
     for (int i = 0; i < gMaxThreads; i++) {
@@ -118,7 +118,7 @@ UdpHubListener::~UdpHubListener()
 {
     QMutexLocker lock(&mMutex);
     mThreadPool.waitForDone();
-    //delete mJTWorker;
+    // delete mJTWorker;
     for (int i = 0; i < gMaxThreads; i++) { delete mJTWorkers->at(i); }
     delete mJTWorkers;
 }
@@ -208,7 +208,7 @@ void UdpHubListener::receivedClientInfo(QTcpSocket* clientConnection)
             QThread::msleep(10);
         }
         // Get a new ID for this client
-        //id = isNewAddress(PeerAddress.toIPv4Address(), peer_udp_port);
+        // id = isNewAddress(PeerAddress.toIPv4Address(), peer_udp_port);
         id = getPoolID(PeerAddress.toString(), peer_udp_port);
     }
     // Assign server port and send it to Client
@@ -248,18 +248,19 @@ void UdpHubListener::receivedClientInfo(QTcpSocket* clientConnection)
     cout << "JackTrip HUB SERVER: Spawning JackTripWorker..." << endl;
     {
         QMutexLocker lock(&mMutex);
-        mJTWorkers->at(id)->setJackTrip(
-            id, mActiveAddress[id].address, server_udp_port, mActiveAddress[id].port,
-            m_connectDefaultAudioPorts);
+        mJTWorkers->at(id)->setJackTrip(id, mActiveAddress[id].address, server_udp_port,
+                                        mActiveAddress[id].port,
+                                        m_connectDefaultAudioPorts);
 
-        //qDebug() << "mPeerAddress" << id <<  mActiveAddress[id].address << mActiveAddress[id].port;
+        // qDebug() << "mPeerAddress" << id <<  mActiveAddress[id].address <<
+        // mActiveAddress[id].port;
     }
-    //send one thread to the pool
+    // send one thread to the pool
     cout << "JackTrip HUB SERVER: Starting JackTripWorker..." << endl;
     mThreadPool.start(mJTWorkers->at(id), QThread::TimeCriticalPriority);
     // wait until one is complete before another spawns
     while (mJTWorkers->at(id)->isSpawning()) { QThread::msleep(10); }
-    //mTotalRunningThreads++;
+    // mTotalRunningThreads++;
     cout << "JackTrip HUB SERVER: Total Running Threads:  " << mTotalRunningThreads
          << endl;
     cout << "===============================================================" << endl;
@@ -268,7 +269,8 @@ void UdpHubListener::receivedClientInfo(QTcpSocket* clientConnection)
     if (isWAIR()) connectMesh(true);  // invoked with -Sw
 #endif                                // endwhere
 
-    //qDebug() << "mPeerAddress" << mActiveAddress[id].address << mActiveAddress[id].port;
+    // qDebug() << "mPeerAddress" << mActiveAddress[id].address <<
+    // mActiveAddress[id].port;
 
     connectPatch(true);
 }
@@ -323,7 +325,7 @@ int UdpHubListener::sendUdpPort(QTcpSocket* clientConnection, int udp_port)
         }
     }
     return 1;
-    //cout << "Port sent to Client" << endl;
+    // cout << "Port sent to Client" << endl;
 }
 
 //*******************************************************************************
@@ -331,8 +333,8 @@ void UdpHubListener::bindUdpSocket(QUdpSocket& udpsocket, int port)
 {
     // QHostAddress::Any : let the kernel decide the active address
     if (!udpsocket.bind(QHostAddress::Any, port, QUdpSocket::DefaultForPlatform)) {
-        //std::cerr << "ERROR: could not bind UDP socket" << endl;
-        //std::exit(1);
+        // std::cerr << "ERROR: could not bind UDP socket" << endl;
+        // std::exit(1);
         throw std::runtime_error("Could not bind UDP socket. It may be already binded.");
     } else {
         cout << "UDP Socket Receiving in Port: " << port << endl;
@@ -350,8 +352,8 @@ int UdpHubListener::isNewAddress(QString address, uint16_t port)
     /*
   while ( !busyAddress && (id<mThreadPool.activeThreadCount()) )
   {
-    if ( address==mActiveAddress[id][0] &&  port==mActiveAddress[id][1]) { busyAddress = true; }
-    id++;
+    if ( address==mActiveAddress[id][0] &&  port==mActiveAddress[id][1]) { busyAddress =
+  true; } id++;
   }
   */
     for (int i = 0; i < gMaxThreads; i++) {
@@ -386,7 +388,7 @@ int UdpHubListener::isNewAddress(QString address, uint16_t port)
 int UdpHubListener::getPoolID(QString address, uint16_t port)
 {
     QMutexLocker lock(&mMutex);
-    //for (int id = 0; id<mThreadPool.activeThreadCount(); id++ )
+    // for (int id = 0; id<mThreadPool.activeThreadCount(); id++ )
     for (int id = 0; id < gMaxThreads; id++) {
         if (address == mActiveAddress[id].address && port == mActiveAddress[id].port) {
             return id;
@@ -418,7 +420,8 @@ void UdpHubListener::connectMesh(bool spawn)
          << endl;
     JMess tmp;
     tmp.connectSpawnedPorts(
-        gDefaultNumInChannels);  // change gDefaultNumInChannels if more than stereo LAIR interconnects
+        gDefaultNumInChannels);  // change gDefaultNumInChannels if more than stereo LAIR
+                                 // interconnects
     //  tmp.disconnectAll();
     //  enumerateRunningThreadIDs();
 }
@@ -471,4 +474,5 @@ void UdpHubListener::stopAllThreads()
     mThreadPool.waitForDone();
 }
 // TODO:
-// USE bool QAbstractSocket::isValid () const to check if socket is connect. if not, exit loop
+// USE bool QAbstractSocket::isValid () const to check if socket is connect. if not, exit
+// loop
