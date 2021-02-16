@@ -70,7 +70,8 @@ enum JTLongOptIDS {
     OPT_BROADCAST,
     OPT_RTUDPPRIORITY,
     OPT_NUMINCOMING,
-    OPT_NUMOUTGOING
+    OPT_NUMOUTGOING,
+    OPT_APPENDTHREADID
 };
 
 //*******************************************************************************
@@ -125,10 +126,12 @@ void Settings::parseInput(int argc, char** argv)
         {"emptyheader", no_argument, NULL, 'e'},  // Run in JamLink mode
         {"clientname", required_argument, NULL, 'J'},  // Run in JamLink mode
         {"remotename", required_argument, NULL, 'K'},  // Client name on hub server
-        {"rtaudio", no_argument, NULL, 'R'},           // Run in JamLink mode
-        {"srate", required_argument, NULL, 'T'},       // Set Sample Rate
-        {"deviceid", required_argument, NULL, 'd'},    // Set RTAudio device id to use
-        {"bufsize", required_argument, NULL, 'F'},     // Set buffer Size
+        {"appendthreadid", no_argument, NULL,
+         OPT_APPENDTHREADID},                        // Append thread id to client names
+        {"rtaudio", no_argument, NULL, 'R'},         // Run in JamLink mode
+        {"srate", required_argument, NULL, 'T'},     // Set Sample Rate
+        {"deviceid", required_argument, NULL, 'd'},  // Set RTAudio device id to use
+        {"bufsize", required_argument, NULL, 'F'},   // Set buffer Size
         {"nojackportsconnect", no_argument, NULL,
          'D'},                                // Don't connect default Audio Ports
         {"version", no_argument, NULL, 'v'},  // Version Number
@@ -328,6 +331,9 @@ void Settings::parseInput(int argc, char** argv)
         case 'K':  // Set Remote client Name
             //-------------------------------------------------------
             mRemoteClientName = optarg;
+            break;
+        case OPT_APPENDTHREADID:
+            mAppendThreadID = true;
             break;
         case 'R':  // RtAudio
             //-------------------------------------------------------
@@ -659,6 +665,8 @@ void Settings::printUsage()
             "when connecting to a hub server (the default is derived from this "
             "computer's external facing IP address)"
          << endl;
+    cout
+        << "     --appendthreadid                     Append thread ID to client names\n";
     cout << " -L, --localaddress                       Change default local host IP "
             "address (default: 127.0.0.1)"
          << endl;
@@ -760,6 +768,8 @@ UdpHubListener* Settings::getConfiguredHubServer()
                                    mSimulatedDelayRel);
     udpHub->setBroadcast(mBroadcastQueue);
     udpHub->setUseRtUdpPriority(mUseRtUdpPriority);
+
+    if (true == mAppendThreadID) { udpHub->mAppendThreadID = true; }
 
     if (mIOStatTimeout > 0) {
         udpHub->setIOStatTimeout(mIOStatTimeout);
