@@ -69,52 +69,9 @@ enum JTLongOptIDS {
     OPT_SIMJITTER,
     OPT_BROADCAST,
     OPT_RTUDPPRIORITY,
+    OPT_NUMINCOMING,
+    OPT_NUMOUTGOING
 };
-
-//*******************************************************************************
-Settings::Settings()
-    : mJackTripMode(JackTrip::SERVER)
-    , mDataProtocol(JackTrip::UDP)
-    , mNumChans(2)
-    , mBufferQueueLength(gDefaultQueueLength)
-    , mAudioBitResolution(AudioInterface::BIT16)
-    , mBindPortNum(gDefaultPort)
-    , mPeerPortNum(gDefaultPort)
-    , mServerUdpPortNum(0)
-    , mUnderrunMode(JackTrip::WAVETABLE)
-    , mStopOnTimeout(false)
-    , mBufferStrategy(1)
-    , mLoopBack(false)
-    ,
-#ifdef WAIR  // WAIR
-    mNumNetRevChans(0)
-    , mWAIR(false)
-    ,
-#endif  // endwhere
-    mJamLink(false)
-    , mEmptyHeader(false)
-    , mJackTripServer(false)
-    , mLocalAddress(gDefaultLocalAddress)
-    , mRedundancy(1)
-    , mUseJack(true)
-    , mChanfeDefaultSR(false)
-    , mChanfeDefaultID(0)
-    , mChanfeDefaultBS(false)
-    , mHubConnectionMode(JackTrip::SERVERTOCLIENT)
-    , mConnectDefaultAudioPorts(true)
-    , mIOStatTimeout(0)
-    , mEffects(false)
-    ,  // outgoing limiter OFF by default
-    mSimulatedLossRate(0.0)
-    , mSimulatedJitterRate(0.0)
-    , mSimulatedDelayRel(0.0)
-    , mBroadcastQueue(0)
-    , mUseRtUdpPriority(false)
-{
-}
-
-//*******************************************************************************
-Settings::~Settings() = default;
 
 //*******************************************************************************
 void Settings::parseInput(int argc, char** argv)
@@ -135,7 +92,11 @@ void Settings::parseInput(int argc, char** argv)
         // These options don't set a flag.
         {"numchannels", required_argument, NULL,
          'n'},  // Number of input and output channels
-#ifdef WAIR     // WAIR
+        {"numincoming", required_argument, NULL,
+         OPT_NUMINCOMING},  // Number of incoming channels
+        {"numoutgoing", required_argument, NULL,
+         OPT_NUMOUTGOING},  // Number of outgoing channels
+#ifdef WAIR                 // WAIR
         {"wair", no_argument, NULL, 'w'},  // Run in LAIR mode, sets numnetrevchannels
         {"addcombfilterlength", required_argument, NULL,
          'N'},                                                 // added comb filter length
@@ -202,9 +163,34 @@ void Settings::parseInput(int argc, char** argv)
                 NULL))
            != -1)
         switch (ch) {
+        case OPT_NUMINCOMING:
+            if (0 < atoi(optarg)) {
+                mNumAudioOutputChans = atoi(optarg);
+            } else {
+                std::cerr
+                    << "--numincoming ERROR: Number of channels must be greater than 0\n";
+                std::exit(1);
+            }
+            break;
+        case OPT_NUMOUTGOING:
+            if (0 < atoi(optarg)) {
+                mNumAudioInputChans = atoi(optarg);
+            } else {
+                std::cerr
+                    << "--numoutgoing ERROR: Number of channels must be greater than 0\n";
+                std::exit(1);
+            }
+            break;
         case 'n':  // Number of input and output channels
             //-------------------------------------------------------
-            mNumChans = atoi(optarg);
+            if (0 < atoi(optarg)) {
+                mNumAudioInputChans  = atoi(optarg);
+                mNumAudioOutputChans = atoi(optarg);
+            } else {
+                std::cerr << "-n --numchannels ERROR: Number of channels must be greater "
+                             "than 0\n";
+                std::exit(1);
+            }
             break;
         case 'U':  // UDP Bind Port
             mServerUdpPortNum = atoi(optarg);
@@ -214,7 +200,8 @@ void Settings::parseInput(int argc, char** argv)
             //-------------------------------------------------------
             mWAIR = true;
             mNumNetRevChans =
-                gDefaultNumNetRevChannels;  // fixed amount sets number of network channels and comb filters for WAIR
+                gDefaultNumNetRevChannels;  // fixed amount sets number of network
+                                            // channels and comb filters for WAIR
             break;
         case 'N':
             //-------------------------------------------------------
@@ -548,14 +535,16 @@ void Settings::parseInput(int argc, char** argv)
         std::exit(1);
     }
 
-    assert(mNumChans > 0);
-    mAudioTester.setSendChannel(mNumChans - 1);  // use last channel for latency testing
-    // Originally, testing only in the last channel was adopted
-    // because channel 0 ("left") was a clap track on CCRMA loopback
-    // servers.  Now, however, we also do it in order to easily keep
-    // effects in all but the last channel, enabling silent testing
-    // in the last channel in parallel with normal operation of the others.
-
+    if (true == mAudioTester.getEnabled()) {
+        assert(mNumAudioInputChans > 0);
+        mAudioTester.setSendChannel(mNumAudioInputChans
+                                    - 1);  // use last channel for latency testing
+        // Originally, testing only in the last channel was adopted
+        // because channel 0 ("left") was a clap track on CCRMA loopback
+        // servers.  Now, however, we also do it in order to easily keep
+        // effects in all but the last channel, enabling silent testing
+        // in the last channel in parallel with normal operation of the others.
+    }
     // Exit if options are incompatible
     //----------------------------------------------------------------------------
     bool haveSomeServerMode = not((mJackTripMode == JackTrip::CLIENT)
@@ -572,8 +561,8 @@ void Settings::parseInput(int argc, char** argv)
                          "server modes (-S and -s).\n\n";
         }
         mEffects.setNoLimiters();
-        // don't exit since an outgoing limiter should be the default (could exit for incoming case):
-        // std::exit(1);
+        // don't exit since an outgoing limiter should be the default (could exit for
+        // incoming case): std::exit(1);
     }
     if (mAudioTester.getEnabled() && haveSomeServerMode) {
         std::cerr << "*** --examine-audio-delay (-x) ERROR: Audio latency measurement "
@@ -583,7 +572,8 @@ void Settings::parseInput(int argc, char** argv)
     if (mAudioTester.getEnabled() && (mAudioBitResolution != AudioInterface::BIT16)
         && (mAudioBitResolution
             != AudioInterface::BIT32)) {  // BIT32 not tested but should be ok
-        // BIT24 should work also, but there's a comment saying it's broken right now, so exclude it
+        // BIT24 should work also, but there's a comment saying it's broken right now, so
+        // exclude it
         std::cerr << "*** --examine-audio-delay (-x) ERROR: Only --bitres (-b) 16 and 32 "
                      "presently supported for audio latency measurement.\n\n";
         std::exit(1);
@@ -611,8 +601,12 @@ void Settings::printUsage()
     cout << endl;
     cout << "OPTIONAL ARGUMENTS: " << endl;
     cout << " -n, --numchannels #                      Number of Input and Output "
-            "Channels (default: "
+            "Channels (# greater than 0, default: "
          << 2 << ")" << endl;
+    cout << "     --numincoming #                      Number of incoming Channels from "
+            "the network (# greater than 0)\n";
+    cout << "     --numoutgoing #                      Number of outgoing Channels to "
+            "the network (# greater than 0)\n";
 #ifdef WAIR  // WAIR
     cout << " -w, --wair                               Run in WAIR Mode" << endl;
     cout << " -N, --addcombfilterlength #              comb length adjustment for WAIR "
@@ -743,7 +737,7 @@ UdpHubListener* Settings::getConfiguredHubServer()
     if (gVerboseFlag)
         std::cout << "JackTrip HUB SERVER TCP Bind Port: " << mBindPortNum << std::endl;
     UdpHubListener* udpHub = new UdpHubListener(mBindPortNum, mServerUdpPortNum);
-    //udpHub->setSettings(this);
+    // udpHub->setSettings(this);
 #ifdef WAIR  // WAIR
     udpHub->setWAIR(mWAIR);
 #endif  // endwhere
@@ -784,7 +778,7 @@ JackTrip* Settings::getConfiguredJackTrip()
     if (gVerboseFlag)
         std::cout << "Settings:startJackTrip before new JackTrip" << std::endl;
     JackTrip* jackTrip = new JackTrip(
-        mJackTripMode, mDataProtocol, mNumChans,
+        mJackTripMode, mDataProtocol, mNumAudioInputChans, mNumAudioOutputChans,
 #ifdef WAIR  // wair
         mNumNetRevChans,
 #endif  // endwhere
@@ -818,18 +812,6 @@ JackTrip* Settings::getConfiguredJackTrip()
         || mJackTripMode == JackTrip::CLIENTTOPINGSERVER) {
         jackTrip->setPeerAddress(mPeerAddress);
     }
-
-    //        if(mLocalAddress!=QString()) // default
-    //            mJackTrip->setLocalAddress(QHostAddress(mLocalAddress.toLatin1().data()));
-    //        else
-    //            mJackTrip->setLocalAddress(QHostAddress::Any);
-
-    // Set Ports - Done in constructor now.
-    //cout << "SETTING ALL PORTS" << endl;
-    /*if (gVerboseFlag) std::cout << "Settings:startJackTrip before mJackTrip->setBindPorts" << std::endl;
-    jackTrip->setBindPorts(mBindPortNum);
-    if (gVerboseFlag) std::cout << "Settings:startJackTrip before mJackTrip->setPeerPorts" << std::endl;
-    jackTrip->setPeerPorts(mPeerPortNum);*/
 
     // Set in JamLink Mode
     if (mJamLink) {
@@ -868,8 +850,8 @@ JackTrip* Settings::getConfiguredJackTrip()
     if (mLoopBack) {
         cout << "Running in Loop-Back Mode..." << endl;
         cout << gPrintSeparator << std::endl;
-        //std::tr1::shared_ptr<LoopBack> loopback(new LoopBack(mNumChans));
-        //mJackTrip->appendProcessPlugin(loopback.get());
+        // std::tr1::shared_ptr<LoopBack> loopback(new LoopBack(mNumChans));
+        // mJackTrip->appendProcessPlugin(loopback.get());
 
 #if 0  // previous technique:
         LoopBack* loopback = new LoopBack(mNumChans);
@@ -879,12 +861,12 @@ JackTrip* Settings::getConfiguredJackTrip()
 #endif
 
         // ----- Test Karplus Strong -----------------------------------
-        //std::tr1::shared_ptr<NetKS> loopback(new NetKS());
-        //mJackTrip->appendProcessPlugin(loopback);
-        //loopback->play();
-        //NetKS* netks = new NetKS;
-        //mJackTrip->appendProcessPlugin(netks);
-        //netks->play();
+        // std::tr1::shared_ptr<NetKS> loopback(new NetKS());
+        // mJackTrip->appendProcessPlugin(loopback);
+        // loopback->play();
+        // NetKS* netks = new NetKS;
+        // mJackTrip->appendProcessPlugin(netks);
+        // netks->play();
         // -------------------------------------------------------------
     }
 
@@ -898,11 +880,13 @@ JackTrip* Settings::getConfiguredJackTrip()
     // Allocate audio effects in client, if any:
     int nReservedChans =
         mAudioTester.getEnabled() ? 1 : 0;  // no fx allowed on tester channel
+
     std::vector<ProcessPlugin*> outgoingEffects =
-        mEffects.allocateOutgoingEffects(mNumChans - nReservedChans);
+        mEffects.allocateOutgoingEffects(mNumAudioInputChans - nReservedChans);
     for (auto p : outgoingEffects) { jackTrip->appendProcessPluginToNetwork(p); }
+
     std::vector<ProcessPlugin*> incomingEffects =
-        mEffects.allocateIncomingEffects(mNumChans - nReservedChans);
+        mEffects.allocateIncomingEffects(mNumAudioOutputChans - nReservedChans);
     for (auto p : incomingEffects) { jackTrip->appendProcessPluginFromNetwork(p); }
 
 #ifdef WAIR  // WAIR
@@ -912,7 +896,7 @@ JackTrip* Settings::getConfiguredJackTrip()
         switch (mNumNetRevChans) {
         case 16: {
             jackTrip->appendProcessPluginFromNetwork(
-                new ap8x2(mNumChans));  // plugin slot 0
+                new ap8x2(mNumChansOut));  // plugin slot 0
             /////////////////////////////////////////////////////////
             Stk16* plugin = new Stk16(mNumNetRevChans);
             plugin->Stk16::initCombClient(mClientAddCombLen, mClientRoomSize);

@@ -43,6 +43,7 @@
 #include <QTimer>
 #include <QWaitCondition>
 #include <iostream>
+#include <limits>
 
 #include "JackTrip.h"
 #include "UdpHubListener.h"
@@ -63,52 +64,25 @@ using std::endl;
 JackTripWorker::JackTripWorker(UdpHubListener* udphublistener, int BufferQueueLength,
                                JackTrip::underrunModeT UnderRunMode, QString clientName)
     : mUdpHubListener(udphublistener)
-    , m_connectDefaultAudioPorts(false)
     , mBufferQueueLength(BufferQueueLength)
     , mUnderRunMode(UnderRunMode)
     , mClientName(clientName)
-    , mSpawning(false)
-    , mID(0)
-    , mNumChans(1)
-    , mIOStatTimeout(0)
-#ifdef WAIR  // wair
-    , mNumNetRevChans(0)
-    , mWAIR(false)
-#endif  // endwhere
 {
     setAutoDelete(false);  // stick around after calling run()
-    //mNetks = new NetKS;
-    //mNetks->play();
-    mBufferStrategy      = 1;
-    mBroadcastQueue      = 0;
-    mSimulatedLossRate   = 0.0;
-    mSimulatedJitterRate = 0.0;
-    mSimulatedDelayRel   = 0.0;
-    mUseRtUdpPriority    = false;
-}
-
-//*******************************************************************************
-JackTripWorker::~JackTripWorker()
-{
-    //delete mUdpHubListener;
 }
 
 //*******************************************************************************
 void JackTripWorker::setJackTrip(int id, QString client_address, uint16_t server_port,
-                                 uint16_t client_port, int num_channels,
-                                 bool connectDefaultAudioPorts)
+                                 uint16_t client_port, bool connectDefaultAudioPorts)
 {
-    {  //Start Spawning, so lock mSpawning
+    {  // Start Spawning, so lock mSpawning
         QMutexLocker locker(&mMutex);
         mSpawning = true;
     }
-    mID = id;
-    // Set the jacktrip address and ports
-    //mClientAddress.setAddress(client_address);
+    mID                        = id;
     mClientAddress             = client_address;
     mServerPort                = server_port;
     mClientPort                = client_port;
-    mNumChans                  = num_channels;
     m_connectDefaultAudioPorts = connectDefaultAudioPorts;
 }
 
@@ -125,17 +99,19 @@ void JackTripWorker::run()
         mSpawning = true;
     }
 
-    //QHostAddress ClientAddress;
+    // QHostAddress ClientAddress;
 
     // Try catching any exceptions that come from JackTrip
     try {
-        // Local event loop. this is necesary because QRunnables don't have their own as QThreads
+        // Local event loop. this is necesary because QRunnables don't have their own as
+        // QThreads
         QEventLoop event_loop;
 
         // Create and setup JackTrip Object
-        //JackTrip jacktrip(JackTrip::SERVER, JackTrip::UDP, mNumChans, 2);
+        // JackTrip jacktrip(JackTrip::SERVER, JackTrip::UDP, mNumChans, 2);
         if (gVerboseFlag)
-            cout << "---> JackTripWorker: Creating jacktrip objects..." << endl;
+            cout << "---> JackTripWorker: Creating jacktrip objects..."
+                 << "\n";
 
 #ifdef WAIR  // WAIR
             // forces    BufferQueueLength to 2
@@ -155,25 +131,27 @@ void JackTripWorker::run()
         //        qDebug() << "is WAIR?" <<  tmp ;
         qDebug() << "mNumNetRevChans" << mNumNetRevChans;
 
-        JackTrip jacktrip(JackTrip::SERVERPINGSERVER, JackTrip::UDP, mNumChans,
+        JackTrip jacktrip(JackTrip::SERVERPINGSERVER, JackTrip::UDP, 1, 1,
                           mNumNetRevChans, FORCEBUFFERQ);
         JackTrip* mJackTrip = &jacktrip;
 #else  // endwhere
-        JackTrip jacktrip(JackTrip::SERVERPINGSERVER, JackTrip::UDP, mNumChans,
+        JackTrip jacktrip(JackTrip::SERVERPINGSERVER, JackTrip::UDP, 1, 1,
                           mBufferQueueLength);
 #endif  // not wair
 
 #ifdef WAIR  // WAIR
         // Add Plugins
         if (mWAIR) {
-            cout << "Running in WAIR Mode..." << endl;
-            cout << gPrintSeparator << std::endl;
+            cout << "Running in WAIR Mode..."
+                 << "\n";
+            cout << gPrintSeparator << "\n";
             switch (mNumNetRevChans) {
             case 16:  // freeverb
                 mJackTrip->appendProcessPluginFromNetwork(
                     new dcblock2gain(mNumChans));  // plugin slot 0
                 ///////////////
-                //            mJackTrip->appendProcessPlugin(new comb16server(mNumNetChans));
+                //            mJackTrip->appendProcessPlugin(new
+                //            comb16server(mNumNetChans));
                 // -S LAIR no AP  mJackTrip->appendProcessPlugin(new AP8(mNumChans));
                 break;
             default:
@@ -188,7 +166,7 @@ void JackTripWorker::run()
 #ifdef __JAMTEST__
         JamTest jacktrip(
             JackTrip::SERVERPINGSERVER);  // ########### JamTest #################
-        //JackTrip jacktrip(JackTrip::SERVERPINGSERVER, JackTrip::UDP, mNumChans, 2);
+        // JackTrip jacktrip(JackTrip::SERVERPINGSERVER, JackTrip::UDP, mNumChans, 2);
 #endif
 
         jacktrip.setConnectDefaultAudioPorts(m_connectDefaultAudioPorts);
@@ -218,14 +196,14 @@ void JackTripWorker::run()
         QObject::connect(this, SIGNAL(signalRemoveThread()), &jacktrip,
                          SLOT(slotStopProcesses()), Qt::QueuedConnection);
 
-        //ClientAddress.setAddress(mClientAddress);
+        // ClientAddress.setAddress(mClientAddress);
         // If I don't type this line, I get a bus error in the next line.
         // I still haven't figure out why
-        //ClientAddress.toString().toLatin1().constData();
-        //jacktrip.setPeerAddress(ClientAddress.toString().toLatin1().constData());
+        // ClientAddress.toString().toLatin1().constData();
+        // jacktrip.setPeerAddress(ClientAddress.toString().toLatin1().constData());
         jacktrip.setPeerAddress(mClientAddress);
         jacktrip.setBindPorts(mServerPort);
-        //jacktrip.setPeerPorts(mClientPort);
+        // jacktrip.setPeerPorts(mClientPort);
         jacktrip.setBufferStrategy(mBufferStrategy);
         jacktrip.setNetIssuesSimulation(mSimulatedLossRate, mSimulatedJitterRate,
                                         mSimulatedDelayRel);
@@ -234,8 +212,8 @@ void JackTripWorker::run()
 
         if (gVerboseFlag)
             cout << "---> JackTripWorker: setJackTripFromClientHeader..." << endl;
-        int PeerConnectionMode = setJackTripFromClientHeader(jacktrip);
-        if (PeerConnectionMode == -1) {
+
+        if (-1 == setJackTripFromClientHeader(jacktrip)) {
             mUdpHubListener->releaseThread(mID);
             {
                 QMutexLocker locker(&mMutex);
@@ -269,7 +247,7 @@ void JackTripWorker::run()
         }
 
         // wait for jacktrip to be done before exiting the Worker Thread
-        //jacktrip.wait();
+        // jacktrip.wait();
 
     } catch (const std::exception& e) {
         std::cerr << "Couldn't send thread to the Pool" << endl;
@@ -301,8 +279,8 @@ void JackTripWorker::run()
 // returns -1 on error
 int JackTripWorker::setJackTripFromClientHeader(JackTrip& jacktrip)
 {
-    //QHostAddress peerHostAddress;
-    //uint16_t peer_port;
+    // QHostAddress peerHostAddress;
+    // uint16_t peer_port;
     QUdpSocket UdpSockTemp;  // Create socket to wait for client
 
     // Bind the socket
@@ -338,28 +316,43 @@ int JackTripWorker::setJackTripFromClientHeader(JackTrip& jacktrip)
     char packet[packet_size];
     UdpSockTemp.readDatagram(packet, packet_size);
     UdpSockTemp.close();  // close the socket
+
+    // TODO Why is this a pointer to int8_t?
     int8_t* full_packet = reinterpret_cast<int8_t*>(packet);
 
-    int PeerBufferSize     = jacktrip.getPeerBufferSize(full_packet);
-    int PeerSamplingRate   = jacktrip.getPeerSamplingRate(full_packet);
-    int PeerBitResolution  = jacktrip.getPeerBitResolution(full_packet);
-    int PeerNumChannels    = jacktrip.getPeerNumChannels(full_packet);
-    int PeerConnectionMode = jacktrip.getPeerConnectionMode(full_packet);
+    int PeerBufferSize          = jacktrip.getPeerBufferSize(full_packet);
+    int PeerSamplingRate        = jacktrip.getPeerSamplingRate(full_packet);
+    int PeerBitResolution       = jacktrip.getPeerBitResolution(full_packet);
+    int PeerNumIncomingChannels = jacktrip.getPeerNumIncomingChannels(full_packet);
+    int PeerNumOutgoingChannels = jacktrip.getPeerNumOutgoingChannels(full_packet);
 
-    if (gVerboseFlag)
-        cout << "--->JackTripWorker: getPeerBufferSize = " << PeerBufferSize << endl;
-    if (gVerboseFlag)
-        cout << "--->JackTripWorker: getPeerSamplingRate = " << PeerSamplingRate << endl;
-    if (gVerboseFlag)
-        cout << "--->JackTripWorker: getPeerBitResolution = " << PeerBitResolution
-             << endl;
-    cout << "--->JackTripWorker: PeerNumChannels = " << PeerNumChannels << endl;
-    if (gVerboseFlag)
-        cout << "--->JackTripWorker: getPeerConnectionMode = " << PeerConnectionMode
-             << endl;
+    if (gVerboseFlag) {
+        cout << "JackTripWorker: getPeerBufferSize       = " << PeerBufferSize << "\n"
+             << "JackTripWorker: getPeerSamplingRate     = " << PeerSamplingRate << "\n"
+             << "JackTripWorker: getPeerBitResolution    = " << PeerBitResolution << "\n"
+             << "JackTripWorker: PeerNumIncomingChannels = " << PeerNumIncomingChannels
+             << "\n"
+             << "JackTripWorker: PeerNumOutgoingChannels = " << PeerNumOutgoingChannels
+             << "\n";
+    }
 
-    jacktrip.setNumChannels(PeerNumChannels);
-    return PeerConnectionMode;
+    // The header field for NumOutgoingChannels was used for the ConnectionMode.
+    // Only the first Mode was used (NORMAL == 0). If this field is set to 0, we
+    // can assume the peer is using an old version, and the last field doesn't reflect the
+    // number of Outgoing Channels.
+    // The maximum of this field will be used as 0.
+    if (JackTrip::NORMAL == PeerNumOutgoingChannels) {
+        jacktrip.setNumInputChannels(PeerNumIncomingChannels);
+        jacktrip.setNumOutputChannels(PeerNumIncomingChannels);
+    } else if (std::numeric_limits<uint8_t>::max() == PeerNumOutgoingChannels) {
+        jacktrip.setNumInputChannels(PeerNumIncomingChannels);
+        jacktrip.setNumOutputChannels(0);
+    } else {
+        jacktrip.setNumInputChannels(PeerNumIncomingChannels);
+        jacktrip.setNumOutputChannels(PeerNumOutgoingChannels);
+    }
+
+    return PeerNumOutgoingChannels;
 }
 
 //*******************************************************************************

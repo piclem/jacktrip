@@ -48,11 +48,11 @@
 #include "JackTrip.h"
 #include "jacktrip_globals.h"
 
-//class JackTrip; // forward declaration
+// class JackTrip; // forward declaration
 class UdpHubListener;  // forward declaration
 
-/** \brief Prototype of the worker class that will be cloned through sending threads to the
- * Thread Pool
+/** \brief Prototype of the worker class that will be cloned through sending threads to
+ * the Thread Pool
  *
  * This class can be send to the ThreadPool using the start() method. Each time
  * it is sent, it'll became "independent" of the prototype, which means
@@ -60,8 +60,8 @@ class UdpHubListener;  // forward declaration
  * another thread into the pool. setAutoDelete must be set to false
  * in order for this to work.
  */
-// Note that it is not possible to start run() as an event loop. That has to be implemented
-// inside a QThread
+// Note that it is not possible to start run() as an event loop. That has to be
+// implemented inside a QThread
 class JackTripWorker
     : public QObject
     , public QRunnable
@@ -75,7 +75,7 @@ class JackTripWorker
                    JackTrip::underrunModeT UnderRunMode = JackTrip::WAVETABLE,
                    QString clientName                   = "");
     /// \brief The class destructor
-    virtual ~JackTripWorker();
+    ~JackTripWorker() = default;
 
     /// \brief Implements the Thread Loop.
     /// To start the thread, call start() ( DO NOT CALL run() ).
@@ -87,8 +87,7 @@ class JackTripWorker
     /// \param id ID number
     /// \param address
     void setJackTrip(int id, QString client_address, uint16_t server_port,
-                     uint16_t client_port, int num_channels,
-                     bool connectDefaultAudioPorts);
+                     uint16_t client_port, bool connectDefaultAudioPorts);
     /// Stop and remove thread from pool
     void stopThread();
     int getID() { return mID; }
@@ -117,15 +116,15 @@ class JackTripWorker
 
    private:
     int setJackTripFromClientHeader(JackTrip& jacktrip);
-    JackTrip::connectionModeT getConnectionModeFromHeader();
 
     UdpHubListener* mUdpHubListener;  ///< Hub Listener Socket
-    //QHostAddress mClientAddress; ///< Client Address
+    // QHostAddress mClientAddress; ///< Client Address
     QString mClientAddress;
     uint16_t mServerPort;  ///< Server Ephemeral Incomming Port to use with Client
-    bool m_connectDefaultAudioPorts;
+    bool m_connectDefaultAudioPorts = false;
 
-    /// Client Outgoing Port. By convention, the receving port will be <tt>mClientPort -1</tt>
+    /// Client Outgoing Port. By convention, the receving port will be <tt>mClientPort
+    /// -1</tt>
     uint16_t mClientPort;
 
     int mBufferQueueLength;
@@ -134,24 +133,23 @@ class JackTripWorker
 
     /// Thread spawning internal lock.
     /// If true, the prototype is working on creating (spawning) a new thread
-    volatile bool mSpawning;
+    volatile bool mSpawning = false;
     QMutex mMutex;  ///< Mutex to protect mSpawning
 
-    int mID;        ///< ID thread number
-    int mNumChans;  ///< Number of Channels
+    int mID = 0;  ///< ID thread number
 
-    int mBufferStrategy;
-    int mBroadcastQueue;
-    double mSimulatedLossRate;
-    double mSimulatedJitterRate;
-    double mSimulatedDelayRel;
-    bool mUseRtUdpPriority;
+    int mBufferStrategy         = 1;
+    int mBroadcastQueue         = 0;
+    double mSimulatedLossRate   = 0.0;
+    double mSimulatedJitterRate = 0.0;
+    double mSimulatedDelayRel   = 0.0;
+    bool mUseRtUdpPriority      = false;
 
-    int mIOStatTimeout;
+    int mIOStatTimeout = 0;
     QSharedPointer<std::ofstream> mIOStatStream;
 #ifdef WAIR  // wair
-    int mNumNetRevChans;  ///< Number of Net Channels = net combs
-    bool mWAIR;
+    int mNumNetRevChans = 0;  ///< Number of Net Channels = net combs
+    bool mWAIR          = false;
 #endif  // endwhere
 };
 
