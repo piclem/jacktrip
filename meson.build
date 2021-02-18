@@ -66,4 +66,9 @@ src += 	['src/JackAudioInterface.cpp',
 	'src/JMess.cpp']
 endif
 
-executable('jacktrip', src, moc_files, dependencies: [qt5_dep, jack_dep, rtaudio_dep, thread_dep], cpp_args: defines, install: true )
+deps = [qt5_dep, jack_dep, rtaudio_dep, thread_dep]
+if host_machine.system() == 'darwin'
+	deps += dependency('appleframeworks', modules : ['foundation','audio'])
+endif
+
+executable('jacktrip', src, moc_files, dependencies: deps, cpp_args: defines, install: true )
