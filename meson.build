@@ -53,15 +53,15 @@ endif
 deps = [qt5_dep, jack_dep]
 
 if not get_option('rtaudio').disabled()
-defines += '-D__RT_AUDIO__'
-rtaudio_dep = dependency('rtaudio', required: false)
-deps += rtaudio_dep
-if not rtaudio_dep.found()
-rtaudio = cmake.subproject('rtaudio')
-rtaudio_dep = rtaudio.dependency('rtaudio')
-deps += rtaudio_dep
-endif
-src += 'src/RtAudioInterface.cpp'
+	defines += '-D__RT_AUDIO__'
+	rtaudio_dep = dependency('rtaudio', required: false)
+	deps += rtaudio_dep
+	if not rtaudio_dep.found()
+		rtaudio = cmake.subproject('rtaudio')
+		rtaudio_dep = rtaudio.dependency('rtaudio')
+		deps += rtaudio_dep
+	endif
+	src += 'src/RtAudioInterface.cpp'
 endif
 
 deps += dependency('threads')
