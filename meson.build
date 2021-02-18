@@ -13,24 +13,6 @@ elif host_machine.system() == 'windows'
 	defines += '-D_WIN32_WINNT=0x0600'
 endif
 
-
-qt5_dep = dependency('qt5', modules: ['Core', 'Network'])
-jack_dep = dependency('jack', required: get_option('jack'))
-if not jack_dep.found()
-	defines += '-D__NO_JACK__'
-endif
-
-if not get_option('rtaudio').disabled()
-defines += '-D__RT_AUDIO__'
-rtaudio_dep = dependency('rtaudio', required: false)
-if not rtaudio_dep.found()
-rtaudio = cmake.subproject('rtaudio')
-rtaudio_dep = rtaudio.dependency('rtaudio')
-endif
-endif
-
-thread_dep = dependency('threads')
-
 moc_h = ['src/DataProtocol.h',
 	'src/JackTrip.h',
 	'src/JackTripWorker.h',
@@ -58,17 +40,36 @@ src = ['src/DataProtocol.cpp',
 	'src/UdpDataProtocol.cpp',
 	'src/UdpHubListener.cpp',
 	'src/AudioInterface.cpp',
-	'src/RtAudioInterface.cpp',
 	'src/Compressor.cpp',
 	'src/Limiter.cpp',
 	'src/Reverb.cpp']
 
+qt5_dep = dependency('qt5', modules: ['Core', 'Network'])
+jack_dep = dependency('jack', required: get_option('jack'))
+if not jack_dep.found()
+	defines += '-D__NO_JACK__'
+endif
+
+deps = [qt5_dep, jack_dep]
+
+if not get_option('rtaudio').disabled()
+defines += '-D__RT_AUDIO__'
+rtaudio_dep = dependency('rtaudio', required: false)
+deps += rtaudio_dep
+if not rtaudio_dep.found()
+rtaudio = cmake.subproject('rtaudio')
+rtaudio_dep = rtaudio.dependency('rtaudio')
+deps += rtaudio_dep
+endif
+src += 'src/RtAudioInterface.cpp'
+endif
+
+deps += dependency('threads')
 if jack_dep.found()
 src += 	['src/JackAudioInterface.cpp',
 	'src/JMess.cpp']
 endif
 
-deps = [qt5_dep, jack_dep, rtaudio_dep, thread_dep]
 if host_machine.system() == 'darwin'
 	deps += dependency('appleframeworks', modules : ['foundation','audio'])
 endif
