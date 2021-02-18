@@ -3,7 +3,7 @@ project('jacktrip', 'cpp', version: '1.2',
 qt5 = import('qt5')
 cmake = import('cmake')
 
-defines = []
+defines = ['-DWAIRTOHUB']
 if host_machine.system() == 'linux'
 	defines += '-D__LINUX__'
 elif host_machine.system() == 'darwin'
@@ -15,16 +15,18 @@ endif
 
 
 qt5_dep = dependency('qt5', modules: ['Core', 'Network'])
-jack_dep = dependency('jack', required: false)
+jack_dep = dependency('jack', required: get_option('jack'))
 if not jack_dep.found()
 	defines += '-D__NO_JACK__'
 endif
 
+if not get_option('rtaudio').disabled()
 defines += '-D__RT_AUDIO__'
 rtaudio_dep = dependency('rtaudio', required: false)
 if not rtaudio_dep.found()
 rtaudio = cmake.subproject('rtaudio')
 rtaudio_dep = rtaudio.dependency('rtaudio')
+endif
 endif
 
 thread_dep = dependency('threads')
