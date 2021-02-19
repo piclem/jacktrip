@@ -63,13 +63,6 @@ jobs:
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
         if: runner.os == 'Windows'
-      - name: Cache Qt
-        id: cache-qt
-        if: runner.os == 'Windows'
-        uses: actions/cache@v1
-        with:
-          path: ../Qt
-          key: ${{ runner.os }}-QtCache-${{ env.QT_VERSION }}
       - name: Install Qt
         uses: jurplel/install-qt-action@v2
         if: runner.os == 'Windows'
@@ -78,7 +71,6 @@ jobs:
           host: 'windows'
           target: 'desktop'
           arch: 'win64_msvc2019_64'
-          cached: ${{ steps.cache-qt.outputs.cache-hit }}
       - name: build on Linux / macOS
         if: runner.os != 'Windows'
         env:
