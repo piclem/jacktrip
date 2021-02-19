@@ -108,6 +108,8 @@ class JackTripWorker
         mIOStatStream = statStream;
     }
 
+    bool mAppendThreadID{false};
+
    private slots:
     void slotTest() { std::cout << "--- JackTripWorker TEST SLOT ---" << std::endl; }
 

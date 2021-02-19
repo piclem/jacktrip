@@ -201,6 +201,8 @@ void JackTripWorker::run()
         // I still haven't figure out why
         // ClientAddress.toString().toLatin1().constData();
         // jacktrip.setPeerAddress(ClientAddress.toString().toLatin1().constData());
+        if (true == mAppendThreadID) { jacktrip.setID(mID + 1); }
+
         jacktrip.setPeerAddress(mClientAddress);
         jacktrip.setBindPorts(mServerPort);
         // jacktrip.setPeerPorts(mClientPort);
