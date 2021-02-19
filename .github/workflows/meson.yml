@@ -2,6 +2,7 @@ name: meson-build
 on: [push, pull_request]
 jobs:
   skip-duplicates:
+    runs-on: ubuntu-latest
     outputs:
       should_skip: ${{ steps.skip_check.outputs.should_skip }}
     steps:
