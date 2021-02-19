@@ -73,6 +73,7 @@ jobs:
         if: runner.os == 'Windows'
         with:
           version: ${{ env.QT_VERSION }}
+          arch: win64_msvc2019_64
           cached: ${{ steps.cache-qt.outputs.cache-hit }}
       - name: build on Linux / macOS
         if: runner.os != 'Windows'
@@ -84,6 +85,7 @@ jobs:
           meson compile
       - name: build on Windows
         if: runner.os == 'Windows'
+        shell: bash
         run: |
           meson setup --backend=vs $BUILD_PATH
           cd $BUILD_PATH
