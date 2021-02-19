@@ -60,6 +60,9 @@ jobs:
           choco install jack
           python -m pip install --upgrade pip
           pip install meson ninja
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
       - name: Cache Qt
         id: cache-qt
         if: runner.os == 'Windows'
@@ -80,8 +83,6 @@ jobs:
           meson $BUILD_PATH
           cd $BUILD_PATH
           meson compile
-      - uses: ilammy/msvc-dev-cmd@v1
-        if: runner.os == 'Windows'
       - name: build on Windows
         if: runner.os == 'Windows'
         run: |
