@@ -71,8 +71,6 @@ jobs:
         uses: jurplel/install-qt-action@v2
         if: runner.os == 'Windows'
         with:
-          version: ${{ env.QT_VERSION }}
-          arch: win64_msvc2019_64
           cached: ${{ steps.cache-qt.outputs.cache-hit }}
       - name: build on Linux / macOS
         if: runner.os != 'Windows'
