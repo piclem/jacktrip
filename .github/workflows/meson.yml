@@ -87,7 +87,7 @@ jobs:
       - name: build on Windows
         if: runner.os == 'Windows'
         run: |
-          meson setup --backend=vs builddir
+          meson setup builddir
           cd builddir
           meson compile
       - name: upload artifacts
