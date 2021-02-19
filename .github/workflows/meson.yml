@@ -58,9 +58,6 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           choco install jack
-      - name: Add msbuild to PATH for Windows
-        if: runner.os == 'Windows'
-        uses: microsoft/setup-msbuild@v1.0.2
       - name: Cache Qt
         id: cache-qt
         if: runner.os == 'Windows'
@@ -83,6 +80,8 @@ jobs:
           meson $BUILD_PATH
           cd $BUILD_PATH
           meson compile
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
       - name: build on Windows
         if: runner.os == 'Windows'
         uses: BSFishy/meson-build@v1.0.2
