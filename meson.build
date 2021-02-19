@@ -11,6 +11,7 @@ elif host_machine.system() == 'darwin'
 elif host_machine.system() == 'windows'
 	defines += '-D__WIN_32__'
 	defines += '-D_WIN32_WINNT=0x0600'
+	defines += '-DNOMINMAX'
 endif
 
 moc_h = ['src/DataProtocol.h',
