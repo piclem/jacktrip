@@ -366,7 +366,7 @@ uint16_t UdpHubListener::readClientUdpPort(QTcpSocket* clientConnection,
         clientName = QString::fromUtf8((const char*)name_buf);
     }
 
-    delete[port_buf]
+    delete[] port_buf;
     return udp_port;
 }
 
