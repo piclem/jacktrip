@@ -658,7 +658,7 @@ void UdpDataProtocol::run()
 
         // Send exit packet (with 1 redundant packet).
         cout << "sending exit packet" << endl;
-        QByteArray exitPacket = QByteArray(mControlPacketSize, 0xff);
+        QByteArray exitPacket = QByteArray(mControlPacketSize, 255);
         sendPacket(exitPacket.constData(), mControlPacketSize);
         sendPacket(exitPacket.constData(), mControlPacketSize);
         emit signalCeaseTransmission();
