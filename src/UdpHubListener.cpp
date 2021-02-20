@@ -281,8 +281,9 @@ void UdpHubListener::receivedClientInfo(QTcpSocket* clientConnection)
 
     // qDebug() << "mPeerAddress" << mActiveAddress[id].address <<
     // mActiveAddress[id].port;
-
+#ifndef __NO_JACK__
     connectPatch(true);
+#endif
 }
 
 void UdpHubListener::stopCheck()
@@ -480,7 +481,9 @@ int UdpHubListener::releaseThread(int id)
 #ifdef WAIR  // wair
     if (isWAIR()) connectMesh(false);  // invoked with -Sw
 #endif                                 // endwhere
+#ifndef __NO_JACK__
     if (getHubPatch()) connectPatch(false);  // invoked with -p > 0
+#endif
     return 0;  /// \todo Check if we really need to return an argument here
 }
 
