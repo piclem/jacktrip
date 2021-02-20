@@ -66,8 +66,8 @@ if not get_option('rtaudio').disabled()
 endif
 
 if host_machine.system() == 'windows'
-	wingetopts = cmake.subproject('wingetopts')
-	deps += wingetopts.dependency('wingetopts')
+	wingetopt = cmake.subproject('wingetopt')
+	deps += wingetopt.dependency('wingetopt')
 endif
 
 deps += dependency('threads')
