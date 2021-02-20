@@ -46,9 +46,9 @@
 
 #include "JackTrip.h"
 #include "jacktrip_globals.h"
-#ifdef __WIN32__
+#ifdef __WIN_32__
 //#include <winsock.h>
-#include <Winsock2.h>  //cc need SD_SEND
+#include <winsock2.h>  //cc need SD_SEND
 #endif
 #if defined(__LINUX__) || (__MAC_OSX__)
 #include <sys/fcntl.h>
