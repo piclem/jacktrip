@@ -65,6 +65,11 @@ if not get_option('rtaudio').disabled()
 	src += 'src/RtAudioInterface.cpp'
 endif
 
+if host_machine.system() == 'windows'
+	wingetopts = cmake.subproject('wingetopts')
+	deps += wingetopts.dependency('wingetopts')
+endif
+
 deps += dependency('threads')
 if jack_dep.found()
 src += 	['src/JackAudioInterface.cpp',
