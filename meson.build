@@ -3,6 +3,8 @@ project('jacktrip', 'cpp', version: '1.3.0',
 qt5 = import('qt5')
 cmake = import('cmake')
 
+compiler = meson.get_compiler('cpp')
+
 defines = ['-DWAIRTOHUB']
 if host_machine.system() == 'linux'
 	defines += '-D__LINUX__'
@@ -25,9 +27,10 @@ moc_h = ['src/DataProtocol.h',
 	'src/UdpHubListener.h']
 moc_files = qt5.preprocess(moc_headers : moc_h)
 
-src = ['src/DataProtocol.cpp',
+src = [	'src/DataProtocol.cpp',
 	'src/JackTrip.cpp',
 	'src/AudioTester.cpp',
+	'src/jacktrip_globals.cpp',
 	'src/jacktrip_globals.cpp',
 	'src/jacktrip_main.cpp',
 	'src/JackTripThread.cpp',
@@ -68,6 +71,7 @@ endif
 if host_machine.system() == 'windows'
 	wingetopt = cmake.subproject('wingetopt')
 	deps += wingetopt.dependency('wingetopt')
+	deps += compiler.find_library('ws2_32', required: true)
 endif
 
 deps += dependency('threads')
