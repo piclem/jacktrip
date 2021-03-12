@@ -37,8 +37,6 @@
 
 #include "JackTripWorker.h"
 
-#include <unistd.h>
-
 #include <QMutexLocker>
 #include <QTimer>
 #include <QWaitCondition>
@@ -315,8 +313,8 @@ int JackTripWorker::setJackTripFromClientHeader(JackTrip& jacktrip)
         return -1;
     }
     int packet_size = UdpSockTemp.pendingDatagramSize();
-    char packet[packet_size];
-    UdpSockTemp.readDatagram(packet, packet_size);
+    int8_t* full_packet = new int8_t[packet_size];
+    UdpSockTemp.readDatagram(reinterpret_cast<char*>(full_packet), packet_size);
     UdpSockTemp.close();  // close the socket
 
     // TODO Why is this a pointer to int8_t?
@@ -327,6 +325,8 @@ int JackTripWorker::setJackTripFromClientHeader(JackTrip& jacktrip)
     int PeerBitResolution       = jacktrip.getPeerBitResolution(full_packet);
     int PeerNumIncomingChannels = jacktrip.getPeerNumIncomingChannels(full_packet);
     int PeerNumOutgoingChannels = jacktrip.getPeerNumOutgoingChannels(full_packet);
+    delete[] full_packet;
+    full_packet = nullptr;
 
     if (gVerboseFlag) {
         cout << "JackTripWorker: getPeerBufferSize       = " << PeerBufferSize << "\n"

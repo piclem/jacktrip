@@ -46,6 +46,10 @@
 #include <iostream>
 #include <stdexcept>
 
+#ifndef __NO_JACK__
+#include "JMess.h"
+#endif
+
 #include "JackTripWorker.h"
 #include "jacktrip_globals.h"
 
@@ -273,8 +277,9 @@ void UdpHubListener::receivedClientInfo(QTcpSocket* clientConnection)
 
     // qDebug() << "mPeerAddress" << mActiveAddress[id].address <<
     // mActiveAddress[id].port;
-
+#ifndef __NO_JACK__
     connectPatch(true);
+#endif
 }
 
 void UdpHubListener::stopCheck()
@@ -298,9 +303,13 @@ uint16_t UdpHubListener::readClientUdpPort(QTcpSocket* clientConnection,
     // --------------------------------
     uint16_t udp_port;
     qint64 size = sizeof(udp_port);
-    char port_buf[size];
+    char* port_buf = new char[size];
     clientConnection->read(port_buf, size);
     std::memcpy(&udp_port, port_buf, size);
+
+    // Read and discard the next two bytes so that we're properly aligned
+    // to read any jack client name request.
+    clientConnection->read(port_buf, size);
 
     if (clientConnection->bytesAvailable() == gMaxRemoteNameLength) {
         char name_buf[gMaxRemoteNameLength];
@@ -308,6 +317,7 @@ uint16_t UdpHubListener::readClientUdpPort(QTcpSocket* clientConnection,
         clientName = QString::fromUtf8((const char*)name_buf);
     }
 
+    delete[] port_buf;
     return udp_port;
 }
 
@@ -409,12 +419,14 @@ int UdpHubListener::releaseThread(int id)
 #ifdef WAIR  // wair
     if (isWAIR()) connectMesh(false);  // invoked with -Sw
 #endif                                 // endwhere
+#ifndef __NO_JACK__
     if (getHubPatch()) connectPatch(false);  // invoked with -p > 0
+#endif
     return 0;  /// \todo Check if we really need to return an argument here
 }
 
 #ifdef WAIR  // wair
-#include "JMess.h"
+#ifndef __NO_JACK__
 //*******************************************************************************
 void UdpHubListener::connectMesh(bool spawn)
 {
@@ -435,9 +447,10 @@ void UdpHubListener::enumerateRunningThreadIDs()
         if (!mActiveAddress[id].address.isEmpty()) { qDebug() << id; }
     }
 }
+#endif
 #endif  // endwhere
 
-#include "JMess.h"
+#ifndef __NO_JACK__
 void UdpHubListener::connectPatch(bool spawn)
 {
     if ((getHubPatch() == JackTrip::NOAUTO)
@@ -462,6 +475,7 @@ void UdpHubListener::connectPatch(bool spawn)
         tmp.connectSpawnedPorts(gDefaultNumInChannels, getHubPatch());
     // FIXME: need change to gDefaultNumInChannels if more than stereo
 }
+#endif
 
 void UdpHubListener::stopAllThreads()
 {
