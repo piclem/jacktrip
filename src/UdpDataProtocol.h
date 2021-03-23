@@ -49,6 +49,8 @@
 #include "jacktrip_globals.h"
 #include "jacktrip_types.h"
 
+#include "RingBuffer.h"
+
 /** \brief UDP implementation of DataProtocol class
  *
  * The class has a <tt>bind port</tt> and a <tt>peer port</tt>. The meaning of these
